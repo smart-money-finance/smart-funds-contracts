@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.6.12;
+pragma solidity ^0.7.5;
 
 import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
@@ -23,16 +23,15 @@ contract SMFund is Context, ERC20 {
   using SafeERC20 for ERC20;
 
   SMFundFactory public factory;
-  address public manager;
+  address public immutable manager;
   address public immutable feeWallet;
   address public immutable aumUpdater;
   uint256 public immutable timelock;
   uint256 public immutable managementFee; // basis points
   uint256 public immutable performanceFee; // basis points
   bool public immutable investmentsEnabled;
-  bool public signedAum;
-
-  // bool public closed;
+  bool public immutable signedAum;
+  bool public initialized;
 
   // uint256[] public aums;
   uint256 public aum;
@@ -89,12 +88,8 @@ contract SMFund is Context, ERC20 {
     bool _investmentsEnabled,
     bool _signedAum,
     string memory name,
-    string memory symbol,
-    uint256 initialAum,
-    address initialInvestor,
-    uint256 deadline,
-    bytes memory signature
-  ) public ERC20(name, symbol) {
+    string memory symbol
+  ) ERC20(name, symbol) {
     factory = SMFundFactory(_msgSender());
     _setupDecimals(factory.usdToken().decimals());
     manager = _manager;
@@ -105,10 +100,6 @@ contract SMFund is Context, ERC20 {
     performanceFee = _performanceFee;
     investmentsEnabled = _investmentsEnabled;
     signedAum = _signedAum;
-    aum = initialAum;
-    verifyAumSignature(deadline, signature);
-    _addToWhitelist(initialInvestor);
-    _addInvestment(initialInvestor, initialAum.mul(1000), 1);
   }
 
   modifier onlyManager() {
@@ -137,9 +128,32 @@ contract SMFund is Context, ERC20 {
     _;
   }
 
-  modifier onlyBeforeDeadline(uint256 deadline) {
+  modifier onlyBefore(uint256 deadline) {
     require(block.timestamp <= deadline, 'Past deadline');
     _;
+  }
+
+  modifier onlyInitialized() {
+    require(initialized, 'Not initialized');
+    _;
+  }
+
+  modifier onlyNotInitialized() {
+    require(!initialized, 'Already initialized');
+    _;
+  }
+
+  function initialize(
+    uint256 initialAum,
+    address initialInvestor,
+    uint256 deadline,
+    bytes memory signature
+  ) public onlyNotInitialized onlyAumUpdater onlyBefore(deadline) {
+    aum = initialAum;
+    verifyAumSignature(deadline, signature);
+    _addToWhitelist(initialInvestor);
+    _addInvestment(initialInvestor, initialAum.mul(1000), 1);
+    initialized = true;
   }
 
   function verifyAumSignature(uint256 deadline, bytes memory signature)
@@ -157,7 +171,7 @@ contract SMFund is Context, ERC20 {
     uint256 _aum,
     uint256 deadline,
     bytes calldata signature
-  ) public onlyAumUpdater onlyBeforeDeadline(deadline) {
+  ) public onlyInitialized onlyAumUpdater onlyBefore(deadline) {
     aum = _aum;
     verifyAumSignature(deadline, signature);
     emit NavUpdated(_aum, totalSupply());
@@ -187,10 +201,11 @@ contract SMFund is Context, ERC20 {
     uint256 deadline
   )
     public
+    onlyInitialized
     notClosed
     onlyInvestmentsEnabled
     onlyWhitelisted
-    onlyBeforeDeadline(deadline)
+    onlyBefore(deadline)
   {
     _addInvestment(_msgSender(), usdTokenAmount, minFundAmount);
   }
@@ -228,10 +243,11 @@ contract SMFund is Context, ERC20 {
     uint256 deadline
   )
     public
+    onlyInitialized
     notClosed
     onlyInvestmentsEnabled
     onlyWhitelisted
-    onlyBeforeDeadline(deadline)
+    onlyBefore(deadline)
   {
     address sender = _msgSender();
     for (uint256 i = 0; i < investmentIds.length; i++) {
@@ -252,10 +268,11 @@ contract SMFund is Context, ERC20 {
     uint256 deadline
   )
     public
+    onlyInitialized
     notClosed
     onlyInvestmentsEnabled
     onlyManager
-    onlyBeforeDeadline(deadline)
+    onlyBefore(deadline)
   {
     // TODO: process fees, figure out how closing out final fund assets should work
     // if (activeInvestmentCount == investmentIds.length) {
@@ -304,10 +321,11 @@ contract SMFund is Context, ERC20 {
 
   function processFees(uint256[] calldata investmentIds, uint256 deadline)
     public
+    onlyInitialized
     notClosed
     onlyInvestmentsEnabled
     onlyManager
-    onlyBeforeDeadline(deadline)
+    onlyBefore(deadline)
   {
     uint256 totalFundFeesBurned = 0;
     uint256 totalUsdTokenFeesCollected = 0;
