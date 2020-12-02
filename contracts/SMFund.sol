@@ -11,7 +11,6 @@ import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
 import './SMFundFactory.sol';
 
 // TODO:
-// figure out how to close out the last investment(s) and wipe out AUM
 // figure out how to allow selling of parts of investments
 // maybe close out an investment and open a new one with the remaining amount after fee extraction?
 // maybe link them together so client can know which ones are splits of others
@@ -274,16 +273,39 @@ contract SMFund is Context, ERC20 {
     onlyManager
     onlyBefore(deadline)
   {
-    // TODO: process fees, figure out how closing out final fund assets should work
-    // if (activeInvestmentCount == investmentIds.length) {
-    //   // close out fund and use final usd tokens spread evenly?
-    // }
+    if (activeInvestmentCount == 1 && investmentIds.length == 1) {
+      // close out fund, don't transfer any AUM, let the fund manager do it manually
+      require(aum >= minUsdTokenAmount, 'Less than min usd amount');
+      Investment storage investment = investments[investmentIds[0]];
+      require(investment.redeemed == false, 'Already redeemed');
+      require(
+        investment.timestamp.add(timelock) <= block.timestamp,
+        'Time locked'
+      );
+      (uint256 fundBurned, uint256 usdTokenCollected) = _extractFees(
+        investment
+      );
+      investment.redeemed = true;
+      activeInvestmentCount--;
+      _burn(investment.investor, investment.fundAmount);
+      uint256 finalAum = aum;
+      aum = 0;
+      emit FeesCollected(
+        fundBurned,
+        usdTokenCollected,
+        investmentIds
+      );
+      emit Redeemed(investment.investor, investment.fundAmount, finalAum, investmentIds);
+      emit NavUpdated(aum, totalSupply());
+      return;
+    }
     address investor = investments[investmentIds[0]].investor;
     uint256 usdTokenAmount = 0;
     uint256 fundAmount = 0;
     uint256 totalFundFeesBurned = 0;
     uint256 totalUsdTokenFeesCollected = 0;
     for (uint256 i = 0; i < investmentIds.length; i++) {
+      require(investmentIds[i] != 0, 'Initial investment must be redeemed separately');
       Investment storage investment = investments[investmentIds[i]];
       require(investment.redeemed == false, 'Already redeemed');
       require(

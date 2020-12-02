@@ -46,4 +46,12 @@ contract SMFundFactory is Context, Ownable {
     funds.push(fund);
     emit FundCreated(address(fund));
   }
+
+  function allFunds() public view returns (SMFund[] memory) {
+    return funds;
+  }
+
+  function fundsLength() public view returns (uint256) {
+    return funds.length;
+  }
 }
