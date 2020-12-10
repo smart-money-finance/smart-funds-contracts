@@ -7,6 +7,7 @@ import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/cryptography/ECDSA.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import "hardhat/console.sol";
 
 import './SMFundFactory.sol';
 
@@ -49,7 +50,7 @@ contract SMFund is Context, ERC20 {
   }
 
   Investment[] public investments;
-  uint256 public activeInvestmentCount = 1;
+  uint256 public activeInvestmentCount;
 
   event NavUpdated(uint256 aum, uint256 totalSupply);
   event Whitelisted(address indexed investor);
@@ -148,10 +149,10 @@ contract SMFund is Context, ERC20 {
     uint256 deadline,
     bytes memory signature
   ) public onlyNotInitialized onlyAumUpdater onlyBefore(deadline) {
-    aum = initialAum;
-    verifyAumSignature(deadline, signature);
+    require(initialAum > 0);
     _addToWhitelist(initialInvestor);
-    _addInvestment(initialInvestor, initialAum.mul(1000), 1);
+    _addInvestment(initialInvestor, initialAum, 1);
+    verifyAumSignature(deadline, signature);
     initialized = true;
   }
 
@@ -215,22 +216,35 @@ contract SMFund is Context, ERC20 {
     uint256 minFundAmount
   ) internal {
     require(usdTokenAmount > 0 && minFundAmount > 0, 'Amount is 0');
-    uint256 fundAmount = usdTokenAmount.mul(totalSupply()).div(aum);
+    uint256 investmentId = investments.length;
+    uint256 fundAmount;
+    // if intialization investment, use price of 1 cent
+    if (investmentId == 0) {
+      fundAmount = usdTokenAmount.mul(100);
+    } else {
+      fundAmount = usdTokenAmount.mul(totalSupply()).div(aum);
+    }
     require(fundAmount >= minFundAmount, 'Less than min fund amount');
-    factory.usdToken().safeTransferFrom(
-      investor,
-      address(this),
-      usdTokenAmount
-    );
+    // don't transfer tokens if it's the initialization investment
+    if (investmentId != 0) {
+      factory.usdToken().safeTransferFrom(
+        investor,
+        manager,
+        usdTokenAmount
+      );
+    }
     aum = aum.add(usdTokenAmount);
     _mint(investor, fundAmount);
-    uint256 investmentId = investments.length;
-    Investment storage investment = investments[investmentId];
-    investment.investor = investor;
-    investment.initialUsdTokenAmount = usdTokenAmount;
-    investment.initialFundAmount = fundAmount;
-    investment.fundAmount = fundAmount;
-    investment.timestamp = block.timestamp;
+    investments.push(Investment({
+      investor: investor,
+      initialUsdTokenAmount: usdTokenAmount,
+      usdTokenFeesCollected: 0,
+      initialFundAmount: fundAmount,
+      fundAmount: fundAmount,
+      timestamp: block.timestamp,
+      lastFeeTimestamp: 0,
+      redeemed: false
+    }));
     activeInvestmentCount++;
     emit Invested(investor, usdTokenAmount, fundAmount, investmentId);
     emit NavUpdated(aum, totalSupply());
@@ -399,6 +413,8 @@ contract SMFund is Context, ERC20 {
     if (totalUsdFee > investment.usdTokenFeesCollected) {
       usdAmountToCollect = totalUsdFee.sub(investment.usdTokenFeesCollected);
       fundAmountToBurn = supply.mul(usdAmountToCollect).div(aum);
+      investment.usdTokenFeesCollected = totalUsdFee;
+      investment.fundAmount = investment.fundAmount.sub(fundAmountToBurn);
       _burn(investment.investor, fundAmountToBurn);
       aum = aum.sub(usdAmountToCollect);
       factory.usdToken().safeTransferFrom(
