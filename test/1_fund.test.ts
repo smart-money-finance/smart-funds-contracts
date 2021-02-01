@@ -1,16 +1,9 @@
-import { describe, it, beforeEach } from 'mocha'
+import { describe, before } from 'mocha'
 import { expect } from 'chai'
 import { ethers } from 'hardhat'
-import { Contract, BigNumber } from 'ethers'
+import { Contract, Event } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import { step } from 'mocha-steps'
-
-function expandTo18Decimals(n: number | string) {
-  return BigNumber.from(n).mul(BigNumber.from(10).pow(18))
-}
-function expandTo6Decimals(n: number | string) {
-  return BigNumber.from(n).mul(BigNumber.from(10).pow(6))
-}
 
 describe('Fund', () => {
   let usdToken: Contract
@@ -33,9 +26,15 @@ describe('Fund', () => {
     wallets.shift()
 
     // initialize wallets with usdc
-    await usdToken.connect(wallets[2]).faucet(expandTo6Decimals('1000000000'))
-    await usdToken.connect(wallets[3]).faucet(expandTo6Decimals('1000000000'))
-    await usdToken.connect(wallets[4]).faucet(expandTo6Decimals('1000000000'))
+    await usdToken
+      .connect(wallets[2])
+      .faucet(ethers.utils.parseUnits('1000', 6))
+    await usdToken
+      .connect(wallets[3])
+      .faucet(ethers.utils.parseUnits('1000', 6))
+    await usdToken
+      .connect(wallets[4])
+      .faucet(ethers.utils.parseUnits('1000', 6))
   })
 
   step('Should create fund', async () => {
@@ -51,16 +50,10 @@ describe('Fund', () => {
       'Bobs cool fund',
       'BCF',
     )
-    let fundAddress = ''
     const txResp = await tx.wait()
-    for (const log of txResp.logs) {
-      if (log.topics[0] === factory.interface.getEventTopic('FundCreated')) {
-        fundAddress = ethers.utils.getAddress(
-          ethers.utils.hexStripZeros(log.topics[1]),
-        )
-        break
-      }
-    }
+    const fundAddress = txResp.events.find(
+      (event: Event) => event.event === 'FundCreated',
+    ).args.fund
     fund = await ethers.getContractAt('SMFund', fundAddress)
   })
 
@@ -70,6 +63,7 @@ describe('Fund', () => {
     await fund.initialize(
       initialAum,
       wallets[1].address,
+      'Bob',
       ethers.constants.MaxUint256,
       '0x00',
     )
@@ -77,23 +71,22 @@ describe('Fund', () => {
   })
 
   step('Should whitelist clients', async () => {
-    expect(await fund.whitelist(wallets[2].address)).to.eq(false)
-    expect(await fund.whitelist(wallets[3].address)).to.eq(false)
-    expect(await fund.whitelist(wallets[4].address)).to.eq(false)
+    expect((await fund.whitelist(wallets[2].address)).whitelisted).to.eq(false)
+    expect((await fund.whitelist(wallets[3].address)).whitelisted).to.eq(false)
+    expect((await fund.whitelist(wallets[4].address)).whitelisted).to.eq(false)
 
-    await fund.whitelistMulti([
-      wallets[2].address,
-      wallets[3].address,
-      wallets[4].address,
-    ])
+    await fund.whitelistMulti(
+      [wallets[2].address, wallets[3].address, wallets[4].address],
+      ['Sam', 'Bill', 'Jim'],
+    )
 
-    expect(await fund.whitelist(wallets[2].address)).to.eq(true)
-    expect(await fund.whitelist(wallets[3].address)).to.eq(true)
-    expect(await fund.whitelist(wallets[4].address)).to.eq(true)
+    expect((await fund.whitelist(wallets[2].address)).whitelisted).to.eq(true)
+    expect((await fund.whitelist(wallets[3].address)).whitelisted).to.eq(true)
+    expect((await fund.whitelist(wallets[4].address)).whitelisted).to.eq(true)
   })
 
   step('Should invest client funds', async () => {
-    const amountToInvest = expandTo6Decimals(100)
+    const amountToInvest = ethers.utils.parseUnits('100', 6)
     const aumBefore = await fund.aum()
     const supplyBefore = await fund.totalSupply()
     const mintedTokens = amountToInvest.mul(supplyBefore).div(aumBefore)
@@ -119,8 +112,8 @@ describe('Fund', () => {
     expect(await fund.aum()).to.eq(newAUM)
   })
 
-  it('Should Process redemption requests', async function () {
-    const amountToInvest = expandTo6Decimals(100)
+  step('Should Process redemption requests', async function () {
+    const amountToInvest = ethers.utils.parseUnits('100', 6)
 
     await usdToken
       .connect(wallets[4])

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.5;
+pragma solidity ^0.7.6;
+pragma abicoder v2;
 
 import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
@@ -31,18 +32,19 @@ contract SMFundFactory is Context, Ownable {
     string calldata symbol
   ) public {
     require(manager != feeWallet, "Manager and fee can't be same");
-    SMFund fund = new SMFund(
-      manager,
-      feeWallet,
-      aumUpdater,
-      timelock,
-      managementFee,
-      performanceFee,
-      investmentsEnabled,
-      signedAum,
-      name,
-      symbol
-    );
+    SMFund fund =
+      new SMFund(
+        manager,
+        feeWallet,
+        aumUpdater,
+        timelock,
+        managementFee,
+        performanceFee,
+        investmentsEnabled,
+        signedAum,
+        name,
+        symbol
+      );
     funds.push(fund);
     emit FundCreated(address(fund));
   }

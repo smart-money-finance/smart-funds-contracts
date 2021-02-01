@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.5;
+pragma solidity ^0.7.6;
+pragma abicoder v2;
 
 import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/cryptography/ECDSA.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
-import "hardhat/console.sol";
+import 'hardhat/console.sol';
 
 import './SMFundFactory.sol';
 
@@ -36,7 +37,12 @@ contract SMFund is Context, ERC20 {
   // uint256[] public aums;
   uint256 public aum;
 
-  mapping(address => bool) public whitelist;
+  struct Investor {
+    bool whitelisted;
+    string name;
+  }
+
+  mapping(address => Investor) public whitelist;
 
   struct Investment {
     address investor;
@@ -53,7 +59,7 @@ contract SMFund is Context, ERC20 {
   uint256 public activeInvestmentCount;
 
   event NavUpdated(uint256 aum, uint256 totalSupply);
-  event Whitelisted(address indexed investor);
+  event Whitelisted(address indexed investor, string name);
   event Blacklisted(address indexed investor);
   event Invested(
     address indexed investor,
@@ -124,7 +130,7 @@ contract SMFund is Context, ERC20 {
   }
 
   modifier onlyWhitelisted() {
-    require(whitelist[_msgSender()] == true, 'Not whitelisted');
+    require(whitelist[_msgSender()].whitelisted == true, 'Not whitelisted');
     _;
   }
 
@@ -146,11 +152,12 @@ contract SMFund is Context, ERC20 {
   function initialize(
     uint256 initialAum,
     address initialInvestor,
+    string calldata initialInvestorName,
     uint256 deadline,
     bytes memory signature
   ) public onlyNotInitialized onlyAumUpdater onlyBefore(deadline) {
     require(initialAum > 0);
-    _addToWhitelist(initialInvestor);
+    _addToWhitelist(initialInvestor, initialInvestorName);
     _addInvestment(initialInvestor, initialAum, 1);
     verifyAumSignature(deadline, signature);
     initialized = true;
@@ -177,20 +184,23 @@ contract SMFund is Context, ERC20 {
     emit NavUpdated(_aum, totalSupply());
   }
 
-  function whitelistMulti(address[] calldata investors) public onlyManager {
+  function whitelistMulti(address[] calldata investors, string[] calldata names)
+    public
+    onlyManager
+  {
     for (uint256 i = 0; i < investors.length; i++) {
-      _addToWhitelist(investors[i]);
+      _addToWhitelist(investors[i], names[i]);
     }
   }
 
-  function _addToWhitelist(address investor) private {
-    whitelist[investor] = true;
-    emit Whitelisted(investor);
+  function _addToWhitelist(address investor, string calldata name) private {
+    whitelist[investor] = Investor({ whitelisted: true, name: name });
+    emit Whitelisted(investor, name);
   }
 
   function blacklistMulti(address[] calldata investors) public onlyManager {
     for (uint256 i = 0; i < investors.length; i++) {
-      whitelist[investors[i]] = false;
+      delete whitelist[investors[i]];
       emit Blacklisted(investors[i]);
     }
   }
@@ -227,24 +237,22 @@ contract SMFund is Context, ERC20 {
     require(fundAmount >= minFundAmount, 'Less than min fund amount');
     // don't transfer tokens if it's the initialization investment
     if (investmentId != 0) {
-      factory.usdToken().safeTransferFrom(
-        investor,
-        manager,
-        usdTokenAmount
-      );
+      factory.usdToken().safeTransferFrom(investor, manager, usdTokenAmount);
     }
     aum = aum.add(usdTokenAmount);
     _mint(investor, fundAmount);
-    investments.push(Investment({
-      investor: investor,
-      initialUsdTokenAmount: usdTokenAmount,
-      usdTokenFeesCollected: 0,
-      initialFundAmount: fundAmount,
-      fundAmount: fundAmount,
-      timestamp: block.timestamp,
-      lastFeeTimestamp: 0,
-      redeemed: false
-    }));
+    investments.push(
+      Investment({
+        investor: investor,
+        initialUsdTokenAmount: usdTokenAmount,
+        usdTokenFeesCollected: 0,
+        initialFundAmount: fundAmount,
+        fundAmount: fundAmount,
+        timestamp: block.timestamp,
+        lastFeeTimestamp: 0,
+        redeemed: false
+      })
+    );
     activeInvestmentCount++;
     emit Invested(investor, usdTokenAmount, fundAmount, investmentId);
     emit NavUpdated(aum, totalSupply());
@@ -296,20 +304,20 @@ contract SMFund is Context, ERC20 {
         investment.timestamp.add(timelock) <= block.timestamp,
         'Time locked'
       );
-      (uint256 fundBurned, uint256 usdTokenCollected) = _extractFees(
-        investment
-      );
+      (uint256 fundBurned, uint256 usdTokenCollected) =
+        _extractFees(investment);
       investment.redeemed = true;
       activeInvestmentCount--;
       _burn(investment.investor, investment.fundAmount);
       uint256 finalAum = aum;
       aum = 0;
-      emit FeesCollected(
-        fundBurned,
-        usdTokenCollected,
+      emit FeesCollected(fundBurned, usdTokenCollected, investmentIds);
+      emit Redeemed(
+        investment.investor,
+        investment.fundAmount,
+        finalAum,
         investmentIds
       );
-      emit Redeemed(investment.investor, investment.fundAmount, finalAum, investmentIds);
       emit NavUpdated(aum, totalSupply());
       return;
     }
@@ -319,7 +327,10 @@ contract SMFund is Context, ERC20 {
     uint256 totalFundFeesBurned = 0;
     uint256 totalUsdTokenFeesCollected = 0;
     for (uint256 i = 0; i < investmentIds.length; i++) {
-      require(investmentIds[i] != 0, 'Initial investment must be redeemed separately');
+      require(
+        investmentIds[i] != 0,
+        'Initial investment must be redeemed separately'
+      );
       Investment storage investment = investments[investmentIds[i]];
       require(investment.redeemed == false, 'Already redeemed');
       require(
@@ -327,9 +338,8 @@ contract SMFund is Context, ERC20 {
         'Time locked'
       );
       require(investment.investor == investor, 'Not from one investor');
-      (uint256 fundBurned, uint256 usdTokenCollected) = _extractFees(
-        investment
-      );
+      (uint256 fundBurned, uint256 usdTokenCollected) =
+        _extractFees(investment);
       totalFundFeesBurned = totalFundFeesBurned.add(fundBurned);
       totalUsdTokenFeesCollected = totalUsdTokenFeesCollected.add(
         usdTokenCollected
@@ -372,9 +382,8 @@ contract SMFund is Context, ERC20 {
         investment.lastFeeTimestamp.add(2419200) <= block.timestamp,
         'Fee last collected less than a month ago'
       );
-      (uint256 fundBurned, uint256 usdTokenCollected) = _extractFees(
-        investment
-      );
+      (uint256 fundBurned, uint256 usdTokenCollected) =
+        _extractFees(investment);
       totalFundFeesBurned = totalFundFeesBurned.add(fundBurned);
       totalUsdTokenFeesCollected = totalUsdTokenFeesCollected.add(
         usdTokenCollected
@@ -388,16 +397,17 @@ contract SMFund is Context, ERC20 {
     emit NavUpdated(aum, totalSupply());
   }
 
-  // TODO: refactor so it's a single usd transfer instead of one per investment?
+  // TODO: refactor so it's a single usd transfer instead of one per investment? actually may be better this way so transfers can be seen as separate on etherscan
   function _extractFees(Investment storage investment)
     private
     returns (uint256, uint256)
   {
     uint256 investmentDuration = block.timestamp.sub(investment.timestamp);
-    uint256 usdTokenManagementFee = investmentDuration
-      .mul(managementFee)
-      .mul(investment.initialUsdTokenAmount)
-      .div(315576000000);
+    uint256 usdTokenManagementFee =
+      investmentDuration
+        .mul(managementFee)
+        .mul(investment.initialUsdTokenAmount)
+        .div(315576000000);
     uint256 supply = totalSupply();
     uint256 currentUsdValue = aum.mul(investment.initialFundAmount).div(supply);
     uint256 usdTokenPerformanceFee = 0;
