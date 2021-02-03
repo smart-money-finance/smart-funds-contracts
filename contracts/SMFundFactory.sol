@@ -13,6 +13,8 @@ contract SMFundFactory is Context, Ownable {
   ERC20 public immutable usdToken;
   SMFund[] public funds;
 
+  mapping(address => address) public managersToFunds;
+
   event FundCreated(address indexed fund);
 
   constructor(ERC20 _usdToken) {
@@ -21,31 +23,35 @@ contract SMFundFactory is Context, Ownable {
 
   function newFund(
     address manager,
-    address feeWallet,
     address aumUpdater,
-    uint256 timelock,
-    uint256 managementFee,
-    uint256 performanceFee,
-    bool investmentsEnabled,
+    // uint256 timelock,
+    // uint256 managementFee,
+    // uint256 performanceFee,
+    // bool investmentsEnabled,
     bool signedAum,
     string calldata name,
-    string calldata symbol
+    string calldata symbol,
+    string calldata logoUrl
   ) public {
-    require(manager != feeWallet, "Manager and fee can't be same");
+    require(
+      managersToFunds[manager] == address(0),
+      'Manager already used for a fund'
+    );
     SMFund fund =
       new SMFund(
         manager,
-        feeWallet,
         aumUpdater,
-        timelock,
-        managementFee,
-        performanceFee,
-        investmentsEnabled,
+        // timelock,
+        // managementFee,
+        // performanceFee,
+        // investmentsEnabled,
         signedAum,
         name,
-        symbol
+        symbol,
+        logoUrl
       );
     funds.push(fund);
+    managersToFunds[manager] = address(fund);
     emit FundCreated(address(fund));
   }
 

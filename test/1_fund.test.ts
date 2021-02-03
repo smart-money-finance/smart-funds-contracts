@@ -40,15 +40,11 @@ describe('Fund', () => {
   step('Should create fund', async () => {
     const tx = await factory.newFund(
       owner.address,
-      wallets[0].address,
       owner.address,
-      1,
-      100,
-      400,
-      true,
       false,
       'Bobs cool fund',
       'BCF',
+      'https://google.com/favicon.ico',
     )
     const txResp = await tx.wait()
     const fundAddress = txResp.events.find(
@@ -61,6 +57,10 @@ describe('Fund', () => {
     const initialAum = await wallets[0].getBalance()
 
     await fund.initialize(
+      1,
+      100,
+      400,
+      true,
       initialAum,
       wallets[1].address,
       'Bob',

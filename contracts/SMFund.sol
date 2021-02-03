@@ -25,14 +25,14 @@ contract SMFund is Context, ERC20 {
 
   SMFundFactory public factory;
   address public immutable manager;
-  address public immutable feeWallet;
   address public immutable aumUpdater;
-  uint256 public immutable timelock;
-  uint256 public immutable managementFee; // basis points
-  uint256 public immutable performanceFee; // basis points
-  bool public immutable investmentsEnabled;
+  uint256 public timelock;
+  uint256 public managementFee; // basis points
+  uint256 public performanceFee; // basis points
+  bool public investmentsEnabled;
   bool public immutable signedAum;
   bool public initialized;
+  string public logoUrl;
 
   // uint256[] public aums;
   uint256 public aum;
@@ -83,29 +83,30 @@ contract SMFund is Context, ERC20 {
     uint256 usdTokenAmount,
     uint256[] investmentIds
   );
+  event FeesWithdrawn(address indexed to, uint256 usdTokenAmount);
 
   constructor(
     address _manager,
-    address _feeWallet,
     address _aumUpdater,
-    uint256 _timelock,
-    uint256 _managementFee,
-    uint256 _performanceFee,
-    bool _investmentsEnabled,
+    // uint256 _timelock,
+    // uint256 _managementFee,
+    // uint256 _performanceFee,
+    // bool _investmentsEnabled,
     bool _signedAum,
     string memory name,
-    string memory symbol
+    string memory symbol,
+    string memory _logoUrl
   ) ERC20(name, symbol) {
     factory = SMFundFactory(_msgSender());
     _setupDecimals(factory.usdToken().decimals());
     manager = _manager;
-    feeWallet = _feeWallet;
     aumUpdater = _aumUpdater;
-    timelock = _timelock;
-    managementFee = _managementFee;
-    performanceFee = _performanceFee;
-    investmentsEnabled = _investmentsEnabled;
+    // timelock = _timelock;
+    // managementFee = _managementFee;
+    // performanceFee = _performanceFee;
+    // investmentsEnabled = _investmentsEnabled;
     signedAum = _signedAum;
+    logoUrl = _logoUrl;
   }
 
   modifier onlyManager() {
@@ -119,7 +120,6 @@ contract SMFund is Context, ERC20 {
   }
 
   modifier notClosed() {
-    // require(!closed, 'Fund is closed');
     require(totalSupply() != 0, 'Fund is closed');
     _;
   }
@@ -150,6 +150,10 @@ contract SMFund is Context, ERC20 {
   }
 
   function initialize(
+    uint256 _timelock,
+    uint256 _managementFee,
+    uint256 _performanceFee,
+    bool _investmentsEnabled,
     uint256 initialAum,
     address initialInvestor,
     string calldata initialInvestorName,
@@ -157,6 +161,10 @@ contract SMFund is Context, ERC20 {
     bytes memory signature
   ) public onlyNotInitialized onlyAumUpdater onlyBefore(deadline) {
     require(initialAum > 0);
+    timelock = _timelock;
+    managementFee = _managementFee;
+    performanceFee = _performanceFee;
+    investmentsEnabled = _investmentsEnabled;
     _addToWhitelist(initialInvestor, initialInvestorName);
     _addInvestment(initialInvestor, initialAum, 1);
     verifyAumSignature(deadline, signature);
@@ -379,7 +387,7 @@ contract SMFund is Context, ERC20 {
       Investment storage investment = investments[investmentIds[i]];
       require(investment.redeemed == false, 'Already redeemed');
       require(
-        investment.lastFeeTimestamp.add(2419200) <= block.timestamp,
+        investment.lastFeeTimestamp.add(30 days) <= block.timestamp,
         'Fee last collected less than a month ago'
       );
       (uint256 fundBurned, uint256 usdTokenCollected) =
@@ -429,12 +437,21 @@ contract SMFund is Context, ERC20 {
       aum = aum.sub(usdAmountToCollect);
       factory.usdToken().safeTransferFrom(
         manager,
-        feeWallet,
+        address(this),
         usdAmountToCollect
       );
     }
     investment.lastFeeTimestamp = block.timestamp;
     return (fundAmountToBurn, usdAmountToCollect);
+  }
+
+  function withdrawFees(
+    uint256 usdTokenAmount,
+    address to,
+    uint256 deadline
+  ) public onlyManager onlyBefore(deadline) {
+    factory.usdToken().safeTransferFrom(address(this), to, usdTokenAmount);
+    emit FeesWithdrawn(to, usdTokenAmount);
   }
 
   function _beforeTokenTransfer(
