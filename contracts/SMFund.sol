@@ -88,10 +88,6 @@ contract SMFund is Context, ERC20 {
   constructor(
     address _manager,
     address _aumUpdater,
-    // uint256 _timelock,
-    // uint256 _managementFee,
-    // uint256 _performanceFee,
-    // bool _investmentsEnabled,
     bool _signedAum,
     string memory name,
     string memory symbol,
@@ -101,10 +97,6 @@ contract SMFund is Context, ERC20 {
     _setupDecimals(factory.usdToken().decimals());
     manager = _manager;
     aumUpdater = _aumUpdater;
-    // timelock = _timelock;
-    // managementFee = _managementFee;
-    // performanceFee = _performanceFee;
-    // investmentsEnabled = _investmentsEnabled;
     signedAum = _signedAum;
     logoUrl = _logoUrl;
   }

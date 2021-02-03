@@ -24,10 +24,6 @@ contract SMFundFactory is Context, Ownable {
   function newFund(
     address manager,
     address aumUpdater,
-    // uint256 timelock,
-    // uint256 managementFee,
-    // uint256 performanceFee,
-    // bool investmentsEnabled,
     bool signedAum,
     string calldata name,
     string calldata symbol,
@@ -38,18 +34,7 @@ contract SMFundFactory is Context, Ownable {
       'Manager already used for a fund'
     );
     SMFund fund =
-      new SMFund(
-        manager,
-        aumUpdater,
-        // timelock,
-        // managementFee,
-        // performanceFee,
-        // investmentsEnabled,
-        signedAum,
-        name,
-        symbol,
-        logoUrl
-      );
+      new SMFund(manager, aumUpdater, signedAum, name, symbol, logoUrl);
     funds.push(fund);
     managersToFunds[manager] = address(fund);
     emit FundCreated(address(fund));
