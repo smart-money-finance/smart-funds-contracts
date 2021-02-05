@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.5;
+pragma solidity ^0.7.6;
+pragma abicoder v2;
 
 import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
@@ -12,6 +13,8 @@ contract SMFundFactory is Context, Ownable {
   ERC20 public immutable usdToken;
   SMFund[] public funds;
 
+  mapping(address => address) public managersToFunds;
+
   event FundCreated(address indexed fund);
 
   constructor(ERC20 _usdToken) {
@@ -20,30 +23,20 @@ contract SMFundFactory is Context, Ownable {
 
   function newFund(
     address manager,
-    address feeWallet,
     address aumUpdater,
-    uint256 timelock,
-    uint256 managementFee,
-    uint256 performanceFee,
-    bool investmentsEnabled,
     bool signedAum,
     string calldata name,
-    string calldata symbol
+    string calldata symbol,
+    string calldata logoUrl
   ) public {
-    require(manager != feeWallet, "Manager and fee can't be same");
-    SMFund fund = new SMFund(
-      manager,
-      feeWallet,
-      aumUpdater,
-      timelock,
-      managementFee,
-      performanceFee,
-      investmentsEnabled,
-      signedAum,
-      name,
-      symbol
+    require(
+      managersToFunds[manager] == address(0),
+      'Manager already used for a fund'
     );
+    SMFund fund =
+      new SMFund(manager, aumUpdater, signedAum, name, symbol, logoUrl);
     funds.push(fund);
+    managersToFunds[manager] = address(fund);
     emit FundCreated(address(fund));
   }
 
