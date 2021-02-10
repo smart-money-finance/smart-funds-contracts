@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "npx hardhat test"
+    "test": "npx hardhat test",
+    "solhint": "solhint **/*.sol"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.1",
@@ -19,6 +20,7 @@
     "ethers": "^5.0.23",
     "hardhat": "^2.0.4",
     "mocha-steps": "^1.3.0",
+    "solhint": "^3.3.2",
     "ts-node": "^9.0.0",
     "typescript": "^4.0.5"
   }

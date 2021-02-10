@@ -26,6 +26,7 @@ describe('Fund', () => {
     wallets.shift()
 
     // initialize wallets with usdc
+    await usdToken.connect(owner).faucet(ethers.utils.parseUnits('1000', 6))
     await usdToken
       .connect(wallets[2])
       .faucet(ethers.utils.parseUnits('1000', 6))
@@ -54,7 +55,11 @@ describe('Fund', () => {
   })
 
   step('Should initialize AUM', async () => {
-    const initialAum = await wallets[0].getBalance()
+    const ethPrice = 1400
+    const ethBalance = await wallets[0].getBalance()
+    const ethUsdValue = ethBalance.mul(ethPrice).div(1e12)
+    const usdcBalance = await usdToken.balanceOf(owner.address)
+    const initialAum = ethUsdValue.add(usdcBalance)
 
     await fund.initialize(
       1,
@@ -108,8 +113,26 @@ describe('Fund', () => {
 
   step('Should update AUM', async () => {
     const newAUM = (await fund.aum()).mul(2)
+    console.log(newAUM.toString())
     await fund.updateAum(newAUM, ethers.constants.MaxUint256, '0x00')
     expect(await fund.aum()).to.eq(newAUM)
+  })
+
+  step('Should Collect fees', async () => {
+    await usdToken.approve(fund.address, ethers.constants.MaxUint256)
+    const investment = await fund.investments(1)
+    const aum_before = await fund.aum()
+    const mgmtfees = await fund.getManagementFee(investment)
+    const perfFees = await fund.getPerformanceFee(investment)
+    await fund.processFees([1], ethers.constants.MaxUint256)
+    const investment_after = await fund.investments(1)
+    const aum_after = await fund.aum()
+    const feesCollected = investment_after.usdPerformanceFeesCollected.add(
+      investment_after.usdManagementFeesCollected,
+    )
+    expect(investment_after.usdPerformanceFeesCollected).to.eq(perfFees)
+    expect(investment_after.usdManagementFeesCollected).to.eq(mgmtfees)
+    expect(aum_after).to.eq(aum_before.sub(feesCollected))
   })
 
   step('Should Process redemption requests', async function () {

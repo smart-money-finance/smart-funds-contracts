@@ -16,7 +16,8 @@ import './SMFundFactory.sol';
 // figure out how to allow selling of parts of investments
 // maybe close out an investment and open a new one with the remaining amount after fee extraction?
 // maybe link them together so client can know which ones are splits of others
-// also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
+// also consider solutions to wallet loss/theft, 
+// should manager have admin power to reassign investments to different addresses?
 
 contract SMFund is Context, ERC20 {
   using SafeMath for uint256;
@@ -48,6 +49,8 @@ contract SMFund is Context, ERC20 {
     address investor;
     uint256 initialUsdTokenAmount;
     uint256 usdTokenFeesCollected;
+    uint256 usdPerformanceFeesCollected;
+    uint256 usdManagementFeesCollected;
     uint256 initialFundAmount;
     uint256 fundAmount;
     uint256 timestamp;
@@ -246,6 +249,8 @@ contract SMFund is Context, ERC20 {
         investor: investor,
         initialUsdTokenAmount: usdTokenAmount,
         usdTokenFeesCollected: 0,
+        usdPerformanceFeesCollected: 0,
+        usdManagementFeesCollected: 0,
         initialFundAmount: fundAmount,
         fundAmount: fundAmount,
         timestamp: block.timestamp,
@@ -396,18 +401,18 @@ contract SMFund is Context, ERC20 {
     );
     emit NavUpdated(aum, totalSupply());
   }
-
-  // TODO: refactor so it's a single usd transfer instead of one per investment? actually may be better this way so transfers can be seen as separate on etherscan
-  function _extractFees(Investment storage investment)
-    private
-    returns (uint256, uint256)
-  {
+  
+  function getManagementFee(Investment memory investment) public view returns (uint256){
     uint256 investmentDuration = block.timestamp.sub(investment.timestamp);
     uint256 usdTokenManagementFee =
       investmentDuration
         .mul(managementFee)
         .mul(investment.initialUsdTokenAmount)
         .div(315576000000);
+    return usdTokenManagementFee;
+  }
+  
+  function getPerformanceFee(Investment memory investment) public view returns (uint256) {
     uint256 supply = totalSupply();
     uint256 currentUsdValue = aum.mul(investment.initialFundAmount).div(supply);
     uint256 usdTokenPerformanceFee = 0;
@@ -417,22 +422,50 @@ contract SMFund is Context, ERC20 {
         .mul(performanceFee)
         .div(10000);
     }
+    return usdTokenPerformanceFee;
+  }
+
+  // TODO: refactor so it's a single usd transfer instead of one per investment? 
+  // actually may be better this way so transfers can be seen as separate on etherscan
+  function _extractFees(Investment storage investment)
+    private
+    returns (uint256, uint256)
+  {
+    uint256 usdTokenManagementFee = getManagementFee(investment);
+    uint256 usdTokenPerformanceFee = getPerformanceFee(investment);
     uint256 totalUsdFee = usdTokenManagementFee.add(usdTokenPerformanceFee);
+    uint256 supply = totalSupply();
     uint256 usdAmountToCollect = 0;
     uint256 fundAmountToBurn = 0;
-    if (totalUsdFee > investment.usdTokenFeesCollected) {
-      usdAmountToCollect = totalUsdFee.sub(investment.usdTokenFeesCollected);
-      fundAmountToBurn = supply.mul(usdAmountToCollect).div(aum);
-      investment.usdTokenFeesCollected = totalUsdFee;
-      investment.fundAmount = investment.fundAmount.sub(fundAmountToBurn);
-      _burn(investment.investor, fundAmountToBurn);
-      aum = aum.sub(usdAmountToCollect);
-      factory.usdToken().safeTransferFrom(
-        manager,
-        address(this),
-        usdAmountToCollect
-      );
+
+    uint256 usdManagementFeeToCollect = usdTokenManagementFee.sub(
+      investment.usdManagementFeesCollected);
+    
+    uint256 fundMgmtFeeToBurn = supply.mul(usdTokenManagementFee).div(aum);
+    fundAmountToBurn = fundAmountToBurn.add(fundMgmtFeeToBurn);
+    investment.usdManagementFeesCollected = usdTokenManagementFee;
+    investment.fundAmount = investment.fundAmount.sub(fundMgmtFeeToBurn);
+
+    uint256 usdPerformanceFeeToCollect = 0;
+    if (usdTokenPerformanceFee > investment.usdPerformanceFeesCollected) {
+      usdPerformanceFeeToCollect = usdTokenPerformanceFee.sub(
+        investment.usdPerformanceFeesCollected);
+    
+      uint256 fundPerfFeeToBurn = supply.mul(usdPerformanceFeeToCollect).div(aum);
+      fundAmountToBurn = fundAmountToBurn.add(fundPerfFeeToBurn);
+      investment.usdPerformanceFeesCollected = usdTokenPerformanceFee;
+      investment.fundAmount = investment.fundAmount.sub(fundPerfFeeToBurn);
     }
+    usdAmountToCollect = usdManagementFeeToCollect.add(usdPerformanceFeeToCollect);
+    investment.usdTokenFeesCollected = investment.usdTokenFeesCollected.add(usdAmountToCollect);
+    _burn(investment.investor, fundAmountToBurn);
+    aum = aum.sub(usdAmountToCollect);
+    factory.usdToken().safeTransferFrom(
+      manager,
+      address(this),
+      usdAmountToCollect
+    );
+
     investment.lastFeeTimestamp = block.timestamp;
     return (fundAmountToBurn, usdAmountToCollect);
   }
