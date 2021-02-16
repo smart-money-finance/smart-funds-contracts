@@ -8,7 +8,7 @@ import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import '@openzeppelin/contracts/cryptography/ECDSA.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
-import 'hardhat/console.sol';
+// import 'hardhat/console.sol';
 
 import './SMFundFactory.sol';
 
@@ -46,8 +46,9 @@ contract SMFund is Context, ERC20 {
 
   struct Investment {
     address investor;
-    uint256 initialUsdTokenAmount;
-    uint256 usdTokenFeesCollected;
+    uint256 initialUsdAmount;
+    uint256 usdManagementFeesCollected;
+    uint256 usdPerformanceFeesCollected;
     uint256 initialFundAmount;
     uint256 fundAmount;
     uint256 timestamp;
@@ -63,27 +64,29 @@ contract SMFund is Context, ERC20 {
   event Blacklisted(address indexed investor);
   event Invested(
     address indexed investor,
-    uint256 usdTokenAmount,
+    uint256 usdAmount,
     uint256 fundAmount,
     uint256 investmentId
   );
   event RedemptionRequested(
     address indexed investor,
-    uint256 minUsdTokenAmount,
+    uint256 minUsdAmount,
     uint256[] investmentIds
   );
   event Redeemed(
     address indexed investor,
     uint256 fundAmount,
-    uint256 usdTokenAmount,
-    uint256[] investmentIds
+    uint256 usdAmount,
+    uint256 investmentId
   );
   event FeesCollected(
-    uint256 fundAmount,
-    uint256 usdTokenAmount,
-    uint256[] investmentIds
+    uint256 fundAmountManagement,
+    uint256 fundAmountPerformance,
+    uint256 usdAmountManagement,
+    uint256 usdAmountPerformance,
+    uint256 investmentId
   );
-  event FeesWithdrawn(address indexed to, uint256 usdTokenAmount);
+  event FeesWithdrawn(address indexed to, uint256 usdAmount);
 
   constructor(
     address _manager,
@@ -206,7 +209,7 @@ contract SMFund is Context, ERC20 {
   }
 
   function invest(
-    uint256 usdTokenAmount,
+    uint256 usdAmount,
     uint256 minFundAmount,
     uint256 deadline
   )
@@ -217,35 +220,36 @@ contract SMFund is Context, ERC20 {
     onlyWhitelisted
     onlyBefore(deadline)
   {
-    _addInvestment(_msgSender(), usdTokenAmount, minFundAmount);
+    _addInvestment(_msgSender(), usdAmount, minFundAmount);
   }
 
   function _addInvestment(
     address investor,
-    uint256 usdTokenAmount,
+    uint256 usdAmount,
     uint256 minFundAmount
   ) internal {
-    require(usdTokenAmount > 0 && minFundAmount > 0, 'Amount is 0');
+    require(usdAmount > 0 && minFundAmount > 0, 'Amount is 0');
     uint256 investmentId = investments.length;
     uint256 fundAmount;
     // if intialization investment, use price of 1 cent
     if (investmentId == 0) {
-      fundAmount = usdTokenAmount.mul(100);
+      fundAmount = usdAmount.mul(100);
     } else {
-      fundAmount = usdTokenAmount.mul(totalSupply()).div(aum);
+      fundAmount = usdAmount.mul(totalSupply()).div(aum);
     }
     require(fundAmount >= minFundAmount, 'Less than min fund amount');
     // don't transfer tokens if it's the initialization investment
     if (investmentId != 0) {
-      factory.usdToken().safeTransferFrom(investor, manager, usdTokenAmount);
+      factory.usdToken().safeTransferFrom(investor, manager, usdAmount);
     }
-    aum = aum.add(usdTokenAmount);
+    aum = aum.add(usdAmount);
     _mint(investor, fundAmount);
     investments.push(
       Investment({
         investor: investor,
-        initialUsdTokenAmount: usdTokenAmount,
-        usdTokenFeesCollected: 0,
+        initialUsdAmount: usdAmount,
+        usdManagementFeesCollected: 0,
+        usdPerformanceFeesCollected: 0,
         initialFundAmount: fundAmount,
         fundAmount: fundAmount,
         timestamp: block.timestamp,
@@ -254,12 +258,12 @@ contract SMFund is Context, ERC20 {
       })
     );
     activeInvestmentCount++;
-    emit Invested(investor, usdTokenAmount, fundAmount, investmentId);
+    emit Invested(investor, usdAmount, fundAmount, investmentId);
     emit NavUpdated(aum, totalSupply());
   }
 
   function requestRedemption(
-    uint256 minUsdTokenAmount,
+    uint256 minUsdAmount,
     uint256[] calldata investmentIds,
     uint256 deadline
   )
@@ -280,12 +284,41 @@ contract SMFund is Context, ERC20 {
         'Time locked'
       );
     }
-    emit RedemptionRequested(sender, minUsdTokenAmount, investmentIds);
+    emit RedemptionRequested(sender, minUsdAmount, investmentIds);
+  }
+
+  // used to process a redemption on the initial investment with index 0 after all other investments have been redeemed
+  // does the same as the other redemptions except it doesn't transfer usd
+  // all remaining aum is considered owned by the initial investor (which should be the fund manager)
+  function closeFund(uint256 deadline)
+    public
+    onlyInitialized
+    notClosed
+    onlyInvestmentsEnabled
+    onlyManager
+    onlyBefore(deadline)
+  {
+    // close out fund, don't transfer any AUM, let the fund manager do it manually
+    require(activeInvestmentCount == 1, 'Must redeem other investments first');
+    Investment storage investment = investments[0];
+    require(investment.redeemed == false, 'Already redeemed');
+    require(
+      investment.timestamp.add(timelock) <= block.timestamp,
+      'Time locked'
+    );
+    _extractFees(0);
+    investment.redeemed = true;
+    activeInvestmentCount--;
+    _burn(investment.investor, investment.fundAmount);
+    uint256 finalAum = aum;
+    aum = 0;
+    emit Redeemed(investment.investor, investment.fundAmount, finalAum, 0);
+    emit NavUpdated(aum, totalSupply());
   }
 
   function processRedemptions(
     uint256[] calldata investmentIds,
-    uint256 minUsdTokenAmount,
+    uint256 minUsdAmount,
     uint256 deadline
   )
     public
@@ -295,74 +328,51 @@ contract SMFund is Context, ERC20 {
     onlyManager
     onlyBefore(deadline)
   {
-    if (activeInvestmentCount == 1 && investmentIds.length == 1) {
-      // close out fund, don't transfer any AUM, let the fund manager do it manually
-      require(aum >= minUsdTokenAmount, 'Less than min usd amount');
-      Investment storage investment = investments[investmentIds[0]];
-      require(investment.redeemed == false, 'Already redeemed');
-      require(
-        investment.timestamp.add(timelock) <= block.timestamp,
-        'Time locked'
-      );
-      (uint256 fundBurned, uint256 usdTokenCollected) =
-        _extractFees(investment);
-      investment.redeemed = true;
-      activeInvestmentCount--;
-      _burn(investment.investor, investment.fundAmount);
-      uint256 finalAum = aum;
-      aum = 0;
-      emit FeesCollected(fundBurned, usdTokenCollected, investmentIds);
-      emit Redeemed(
-        investment.investor,
-        investment.fundAmount,
-        finalAum,
-        investmentIds
-      );
-      emit NavUpdated(aum, totalSupply());
-      return;
-    }
     address investor = investments[investmentIds[0]].investor;
-    uint256 usdTokenAmount = 0;
-    uint256 fundAmount = 0;
-    uint256 totalFundFeesBurned = 0;
-    uint256 totalUsdTokenFeesCollected = 0;
+    uint256 usdAmount = 0;
     for (uint256 i = 0; i < investmentIds.length; i++) {
-      require(
-        investmentIds[i] != 0,
-        'Initial investment must be redeemed separately'
-      );
       Investment storage investment = investments[investmentIds[i]];
-      require(investment.redeemed == false, 'Already redeemed');
-      require(
-        investment.timestamp.add(timelock) <= block.timestamp,
-        'Time locked'
-      );
       require(investment.investor == investor, 'Not from one investor');
-      (uint256 fundBurned, uint256 usdTokenCollected) =
-        _extractFees(investment);
-      totalFundFeesBurned = totalFundFeesBurned.add(fundBurned);
-      totalUsdTokenFeesCollected = totalUsdTokenFeesCollected.add(
-        usdTokenCollected
-      );
-      investment.redeemed = true;
-      activeInvestmentCount--;
-      fundAmount = investment.fundAmount.add(fundAmount);
-      // TODO: does total supply and/or aum changing every loop affect the math?
-      usdTokenAmount = investment.fundAmount.mul(aum).div(totalSupply()).add(
-        usdTokenAmount
-      );
+      _extractFees(investmentIds[i]);
+      usdAmount = _redeem(investmentIds[i]).add(usdAmount);
     }
-    require(usdTokenAmount >= minUsdTokenAmount, 'Less than min usd amount');
-    _burn(investor, fundAmount);
-    aum = aum.sub(usdTokenAmount);
-    factory.usdToken().safeTransferFrom(manager, investor, usdTokenAmount);
-    emit FeesCollected(
-      totalFundFeesBurned,
-      totalUsdTokenFeesCollected,
-      investmentIds
-    );
-    emit Redeemed(investor, fundAmount, usdTokenAmount, investmentIds);
+    require(usdAmount >= minUsdAmount, 'Less than min usd amount');
     emit NavUpdated(aum, totalSupply());
+  }
+
+  function _redeem(uint256 investmentId) private returns (uint256) {
+    Investment storage investment = investments[investmentId];
+    require(
+      investmentId != 0,
+      'Initial investment must be redeemed separately'
+    );
+    require(investment.redeemed == false, 'Already redeemed');
+    require(
+      investment.timestamp.add(timelock) <= block.timestamp,
+      'Time locked'
+    );
+    // mark investment as redeemed and lower total investment count
+    investment.redeemed = true;
+    activeInvestmentCount--;
+    // calculate usd value of the current fundAmount remaining in the investment
+    uint256 usdAmount = investment.fundAmount.mul(aum).div(totalSupply());
+    // burn fund tokens
+    _burn(investment.investor, investment.fundAmount);
+    // subtract usd amount from aum
+    aum = aum.sub(usdAmount);
+    // transfer usd to investor
+    factory.usdToken().safeTransferFrom(
+      manager,
+      investment.investor,
+      usdAmount
+    );
+    emit Redeemed(
+      investment.investor,
+      investment.fundAmount,
+      usdAmount,
+      investmentId
+    );
+    return usdAmount;
   }
 
   function processFees(uint256[] calldata investmentIds, uint256 deadline)
@@ -373,8 +383,6 @@ contract SMFund is Context, ERC20 {
     onlyManager
     onlyBefore(deadline)
   {
-    uint256 totalFundFeesBurned = 0;
-    uint256 totalUsdTokenFeesCollected = 0;
     for (uint256 i = 0; i < investmentIds.length; i++) {
       Investment storage investment = investments[investmentIds[i]];
       require(investment.redeemed == false, 'Already redeemed');
@@ -382,68 +390,93 @@ contract SMFund is Context, ERC20 {
         investment.lastFeeTimestamp.add(30 days) <= block.timestamp,
         'Fee last collected less than a month ago'
       );
-      (uint256 fundBurned, uint256 usdTokenCollected) =
-        _extractFees(investment);
-      totalFundFeesBurned = totalFundFeesBurned.add(fundBurned);
-      totalUsdTokenFeesCollected = totalUsdTokenFeesCollected.add(
-        usdTokenCollected
-      );
+      _extractFees(investmentIds[i]);
     }
-    emit FeesCollected(
-      totalFundFeesBurned,
-      totalUsdTokenFeesCollected,
-      investmentIds
-    );
     emit NavUpdated(aum, totalSupply());
   }
 
-  // TODO: refactor so it's a single usd transfer instead of one per investment? actually may be better this way so transfers can be seen as separate on etherscan
-  function _extractFees(Investment storage investment)
-    private
-    returns (uint256, uint256)
-  {
-    uint256 investmentDuration = block.timestamp.sub(investment.timestamp);
-    uint256 usdTokenManagementFee =
-      investmentDuration
+  function _extractFees(uint256 investmentId) private {
+    Investment storage investment = investments[investmentId];
+    // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
+    uint256 fundManagementFee =
+      block
+        .timestamp
+        .sub(investment.timestamp)
         .mul(managementFee)
-        .mul(investment.initialUsdTokenAmount)
-        .div(315576000000);
+        .mul(investment.fundAmount)
+        .div(3652500 days); // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000, do it in one operation to save a little gas
+
     uint256 supply = totalSupply();
-    uint256 currentUsdValue = aum.mul(investment.initialFundAmount).div(supply);
-    uint256 usdTokenPerformanceFee = 0;
-    if (currentUsdValue > investment.initialUsdTokenAmount) {
-      usdTokenPerformanceFee = currentUsdValue
-        .sub(investment.initialUsdTokenAmount)
+
+    // calculate the usd value of the management fee being pulled
+    uint256 usdManagementFee = fundManagementFee.mul(aum).div(supply);
+
+    // usd value of the investment
+    uint256 currentUsdValue = aum.mul(investment.fundAmount).div(supply);
+    uint256 totalUsdPerformanceFee = 0;
+    if (currentUsdValue > investment.initialUsdAmount) {
+      // calculate current performance fee from initial usd value of investment to current usd value
+      totalUsdPerformanceFee = currentUsdValue
+        .sub(investment.initialUsdAmount)
         .mul(performanceFee)
         .div(10000);
     }
-    uint256 totalUsdFee = usdTokenManagementFee.add(usdTokenPerformanceFee);
-    uint256 usdAmountToCollect = 0;
-    uint256 fundAmountToBurn = 0;
-    if (totalUsdFee > investment.usdTokenFeesCollected) {
-      usdAmountToCollect = totalUsdFee.sub(investment.usdTokenFeesCollected);
-      fundAmountToBurn = supply.mul(usdAmountToCollect).div(aum);
-      investment.usdTokenFeesCollected = totalUsdFee;
-      investment.fundAmount = investment.fundAmount.sub(fundAmountToBurn);
-      _burn(investment.investor, fundAmountToBurn);
-      aum = aum.sub(usdAmountToCollect);
-      factory.usdToken().safeTransferFrom(
-        manager,
-        address(this),
-        usdAmountToCollect
+
+    uint256 usdPerformanceFee = 0;
+    uint256 fundPerformanceFee = 0;
+    // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
+    if (totalUsdPerformanceFee > investment.usdPerformanceFeesCollected) {
+      usdPerformanceFee = totalUsdPerformanceFee.sub(
+        investment.usdPerformanceFeesCollected
       );
+      fundPerformanceFee = supply.mul(usdPerformanceFee).div(aum);
     }
+
+    // update totals stored in the investment struct
+    investment.usdManagementFeesCollected = investment
+      .usdManagementFeesCollected
+      .add(usdManagementFee);
+    investment.usdPerformanceFeesCollected = investment
+      .usdPerformanceFeesCollected
+      .add(usdPerformanceFee);
+    investment.fundAmount = investment.fundAmount.sub(fundManagementFee).sub(
+      fundPerformanceFee
+    );
     investment.lastFeeTimestamp = block.timestamp;
-    return (fundAmountToBurn, usdAmountToCollect);
+
+    // 2 burns and 2 transfers are done so events show up separately on etherscan and elsewhere which makes matching them up with what the UI shows a lot easier
+    // burn the two fee amounts from the investor
+    _burn(investment.investor, fundManagementFee);
+    _burn(investment.investor, fundPerformanceFee);
+    // decrement fund aum by the usd amounts
+    aum = aum.sub(usdManagementFee).sub(usdPerformanceFee);
+    // transfer usd for the two fee amounts
+    factory.usdToken().safeTransferFrom(
+      manager,
+      address(this),
+      usdManagementFee
+    );
+    factory.usdToken().safeTransferFrom(
+      manager,
+      address(this),
+      usdPerformanceFee
+    );
+    emit FeesCollected(
+      fundManagementFee,
+      fundPerformanceFee,
+      usdManagementFee,
+      usdPerformanceFee,
+      investmentId
+    );
   }
 
   function withdrawFees(
-    uint256 usdTokenAmount,
+    uint256 usdAmount,
     address to,
     uint256 deadline
   ) public onlyManager onlyBefore(deadline) {
-    factory.usdToken().safeTransferFrom(address(this), to, usdTokenAmount);
-    emit FeesWithdrawn(to, usdTokenAmount);
+    factory.usdToken().safeTransferFrom(address(this), to, usdAmount);
+    emit FeesWithdrawn(to, usdAmount);
   }
 
   function _beforeTokenTransfer(
