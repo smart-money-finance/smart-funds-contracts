@@ -1,6 +1,6 @@
 import { describe, before } from 'mocha'
 import { expect } from 'chai'
-import { ethers } from 'hardhat'
+import { ethers, network } from 'hardhat'
 import { Contract, Event } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import { step } from 'mocha-steps'
@@ -106,6 +106,23 @@ describe('Fund', () => {
     expect(await fund.totalSupply()).to.eq(supplyBefore.add(mintedTokens))
   })
 
+  step('Should increase time and process fees', async () => {
+    await usdToken.approve(fund.address, ethers.constants.MaxUint256)
+    await debug()
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [60 * 60 * 24 * 31],
+    })
+    await fund.processFees([1], ethers.constants.MaxUint256)
+    await debug()
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [60 * 60 * 24 * 31],
+    })
+    await fund.processFees([1], ethers.constants.MaxUint256)
+    await debug()
+  })
+
   step('Should update AUM', async () => {
     await usdToken
       .connect(wallets[3])
@@ -126,7 +143,6 @@ describe('Fund', () => {
       .invest(amountToInvest, '1', ethers.constants.MaxUint256)
 
     await debug()
-    await usdToken.approve(fund.address, ethers.constants.MaxUint256)
     await fund.processRedemptions([1], '1', ethers.constants.MaxUint256)
     await debug()
     await fund.processRedemptions([2], '1', ethers.constants.MaxUint256)

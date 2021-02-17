@@ -253,7 +253,7 @@ contract SMFund is Context, ERC20 {
         initialFundAmount: fundAmount,
         fundAmount: fundAmount,
         timestamp: block.timestamp,
-        lastFeeTimestamp: 0,
+        lastFeeTimestamp: block.timestamp,
         redeemed: false
       })
     );
