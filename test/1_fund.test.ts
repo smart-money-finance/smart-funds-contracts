@@ -1,6 +1,6 @@
 import { describe, before } from 'mocha'
 import { expect } from 'chai'
-import { ethers } from 'hardhat'
+import { ethers, network } from 'hardhat'
 import { Contract, Event } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import { step } from 'mocha-steps'
@@ -23,9 +23,9 @@ describe('Fund', () => {
 
     wallets = await ethers.getSigners()
     owner = wallets[0]
-    wallets.shift()
 
     // initialize wallets with usdc
+    await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100', 6))
     await usdToken
       .connect(wallets[2])
       .faucet(ethers.utils.parseUnits('1000', 6))
@@ -54,7 +54,7 @@ describe('Fund', () => {
   })
 
   step('Should initialize AUM', async () => {
-    const initialAum = await wallets[0].getBalance()
+    const initialAum = await usdToken.balanceOf(owner.address)
 
     await fund.initialize(
       1,
@@ -106,8 +106,28 @@ describe('Fund', () => {
     expect(await fund.totalSupply()).to.eq(supplyBefore.add(mintedTokens))
   })
 
+  step('Should increase time and process fees', async () => {
+    await usdToken.approve(fund.address, ethers.constants.MaxUint256)
+    await debug()
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [60 * 60 * 24 * 31],
+    })
+    await fund.processFees([1], ethers.constants.MaxUint256)
+    await debug()
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [60 * 60 * 24 * 31],
+    })
+    await fund.processFees([1], ethers.constants.MaxUint256)
+    await debug()
+  })
+
   step('Should update AUM', async () => {
-    const newAUM = (await fund.aum()).mul(2)
+    await usdToken
+      .connect(wallets[3])
+      .transfer(owner.address, ethers.utils.parseUnits('100', 6))
+    const newAUM = await usdToken.balanceOf(owner.address)
     await fund.updateAum(newAUM, ethers.constants.MaxUint256, '0x00')
     expect(await fund.aum()).to.eq(newAUM)
   })
@@ -123,12 +143,15 @@ describe('Fund', () => {
       .invest(amountToInvest, '1', ethers.constants.MaxUint256)
 
     await debug()
-    await usdToken.approve(fund.address, ethers.constants.MaxUint256)
     await fund.processRedemptions([1], '1', ethers.constants.MaxUint256)
     await debug()
     await fund.processRedemptions([2], '1', ethers.constants.MaxUint256)
     await debug()
-    await fund.processRedemptions([3], '1', ethers.constants.MaxUint256)
+  })
+
+  step('Should close fund', async function () {
+    await debug()
+    await fund.closeFund(ethers.constants.MaxUint256)
     await debug()
   })
 
