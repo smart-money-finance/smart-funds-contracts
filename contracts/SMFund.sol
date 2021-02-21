@@ -33,6 +33,10 @@ contract SMFund is Context, ERC20 {
   bool public immutable signedAum;
   bool public initialized;
   string public logoUrl;
+  // TODO: make these params?
+  uint256 public constant maxInvestors = 20;
+  uint256 public constant maxInvestmentsPerInvestor = 5;
+  uint256 public constant minInvestmentAmount = 10000e6; // $10,000
 
   // uint256[] public aums;
   uint256 public aum;
@@ -58,6 +62,8 @@ contract SMFund is Context, ERC20 {
 
   Investment[] public investments;
   uint256 public activeInvestmentCount;
+  mapping(address => uint256) public activeInvestmentCountPerInvestor;
+  uint256 public investorCount;
 
   event NavUpdated(uint256 aum, uint256 totalSupply);
   event Whitelisted(address indexed investor, string name);
@@ -197,12 +203,20 @@ contract SMFund is Context, ERC20 {
   }
 
   function _addToWhitelist(address investor, string calldata name) private {
+    require(investorCount < maxInvestors, 'Too many investors whitelisted');
+    investorCount++;
     whitelist[investor] = Investor({ whitelisted: true, name: name });
     emit Whitelisted(investor, name);
   }
 
   function blacklistMulti(address[] calldata investors) public onlyManager {
     for (uint256 i = 0; i < investors.length; i++) {
+      require(
+        activeInvestmentCountPerInvestor[investors[i]] == 0,
+        'Investor has open investments'
+      );
+      require(whitelist[investors[i]].whitelisted, 'Not whitelisted');
+      investorCount--;
       delete whitelist[investors[i]];
       emit Blacklisted(investors[i]);
     }
@@ -228,7 +242,12 @@ contract SMFund is Context, ERC20 {
     uint256 usdAmount,
     uint256 minFundAmount
   ) internal {
-    require(usdAmount > 0 && minFundAmount > 0, 'Amount is 0');
+    require(usdAmount >= minInvestmentAmount, 'Amount is less than min');
+    require(minFundAmount > 0, 'Min amount is 0');
+    require(
+      activeInvestmentCountPerInvestor[investor] < maxInvestmentsPerInvestor,
+      'Max investments per investor reached'
+    );
     uint256 investmentId = investments.length;
     uint256 fundAmount;
     // if intialization investment, use price of 1 cent
@@ -258,6 +277,7 @@ contract SMFund is Context, ERC20 {
       })
     );
     activeInvestmentCount++;
+    activeInvestmentCountPerInvestor[investor]++;
     emit Invested(investor, usdAmount, fundAmount, investmentId);
     emit NavUpdated(aum, totalSupply());
   }
@@ -309,6 +329,7 @@ contract SMFund is Context, ERC20 {
     _extractFees(0);
     investment.redeemed = true;
     activeInvestmentCount--;
+    activeInvestmentCountPerInvestor[investment.investor]--;
     _burn(investment.investor, investment.fundAmount);
     uint256 finalAum = aum;
     aum = 0;
@@ -340,7 +361,7 @@ contract SMFund is Context, ERC20 {
     emit NavUpdated(aum, totalSupply());
   }
 
-  function _redeem(uint256 investmentId) private returns (uint256) {
+  function _redeem(uint256 investmentId) private returns (uint256 usdAmount) {
     Investment storage investment = investments[investmentId];
     require(
       investmentId != 0,
@@ -354,8 +375,9 @@ contract SMFund is Context, ERC20 {
     // mark investment as redeemed and lower total investment count
     investment.redeemed = true;
     activeInvestmentCount--;
+    activeInvestmentCountPerInvestor[investment.investor]--;
     // calculate usd value of the current fundAmount remaining in the investment
-    uint256 usdAmount = investment.fundAmount.mul(aum).div(totalSupply());
+    usdAmount = investment.fundAmount.mul(aum).div(totalSupply());
     // burn fund tokens
     _burn(investment.investor, investment.fundAmount);
     // subtract usd amount from aum
@@ -372,7 +394,6 @@ contract SMFund is Context, ERC20 {
       usdAmount,
       investmentId
     );
-    return usdAmount;
   }
 
   function processFees(uint256[] calldata investmentIds, uint256 deadline)
@@ -396,42 +417,13 @@ contract SMFund is Context, ERC20 {
   }
 
   function _extractFees(uint256 investmentId) private {
+    // calculate fees in usd and fund token
+    (uint256 usdManagementFee, uint256 fundManagementFee) =
+      calculateManagementFee(investmentId);
+    (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
+      calculatePerformanceFee(investmentId);
+
     Investment storage investment = investments[investmentId];
-    // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
-    uint256 fundManagementFee =
-      block
-        .timestamp
-        .sub(investment.timestamp)
-        .mul(managementFee)
-        .mul(investment.fundAmount)
-        .div(3652500 days); // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000, do it in one operation to save a little gas
-
-    uint256 supply = totalSupply();
-
-    // calculate the usd value of the management fee being pulled
-    uint256 usdManagementFee = fundManagementFee.mul(aum).div(supply);
-
-    // usd value of the investment
-    uint256 currentUsdValue = aum.mul(investment.fundAmount).div(supply);
-    uint256 totalUsdPerformanceFee = 0;
-    if (currentUsdValue > investment.initialUsdAmount) {
-      // calculate current performance fee from initial usd value of investment to current usd value
-      totalUsdPerformanceFee = currentUsdValue
-        .sub(investment.initialUsdAmount)
-        .mul(performanceFee)
-        .div(10000);
-    }
-
-    uint256 usdPerformanceFee = 0;
-    uint256 fundPerformanceFee = 0;
-    // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
-    if (totalUsdPerformanceFee > investment.usdPerformanceFeesCollected) {
-      usdPerformanceFee = totalUsdPerformanceFee.sub(
-        investment.usdPerformanceFeesCollected
-      );
-      fundPerformanceFee = supply.mul(usdPerformanceFee).div(aum);
-    }
-
     // update totals stored in the investment struct
     investment.usdManagementFeesCollected = investment
       .usdManagementFeesCollected
@@ -468,6 +460,63 @@ contract SMFund is Context, ERC20 {
       usdPerformanceFee,
       investmentId
     );
+  }
+
+  function calculateManagementFee(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdManagementFee, uint256 fundManagementFee)
+  {
+    Investment storage investment = investments[investmentId];
+    // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
+    fundManagementFee = block
+      .timestamp
+      .sub(investment.timestamp)
+      .mul(managementFee)
+      .mul(investment.fundAmount)
+      .div(3652500 days); // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000, do it in one operation to save a little gas
+
+    // calculate the usd value of the management fee being pulled
+    usdManagementFee = fundManagementFee.mul(aum).div(totalSupply());
+  }
+
+  function calculatePerformanceFee(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdPerformanceFee, uint256 fundPerformanceFee)
+  {
+    Investment storage investment = investments[investmentId];
+    uint256 supply = totalSupply();
+    // usd value of the investment
+    uint256 currentUsdValue = aum.mul(investment.fundAmount).div(supply);
+    uint256 totalUsdPerformanceFee = 0;
+    if (currentUsdValue > investment.initialUsdAmount) {
+      // calculate current performance fee from initial usd value of investment to current usd value
+      totalUsdPerformanceFee = currentUsdValue
+        .sub(investment.initialUsdAmount)
+        .mul(performanceFee)
+        .div(10000);
+    }
+    // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
+    if (totalUsdPerformanceFee > investment.usdPerformanceFeesCollected) {
+      usdPerformanceFee = totalUsdPerformanceFee.sub(
+        investment.usdPerformanceFeesCollected
+      );
+      fundPerformanceFee = supply.mul(usdPerformanceFee).div(aum);
+    }
+  }
+
+  function highWaterMark(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdValue)
+  {
+    Investment storage investment = investments[investmentId];
+    usdValue = investment
+      .usdPerformanceFeesCollected
+      .mul(10000)
+      .div(performanceFee)
+      .add(investment.initialUsdAmount);
   }
 
   function withdrawFees(
