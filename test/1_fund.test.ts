@@ -25,16 +25,16 @@ describe('Fund', () => {
     owner = wallets[0]
 
     // initialize wallets with usdc
-    await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100', 6))
+    await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100000', 6))
     await usdToken
       .connect(wallets[2])
-      .faucet(ethers.utils.parseUnits('1000', 6))
+      .faucet(ethers.utils.parseUnits('100000', 6))
     await usdToken
       .connect(wallets[3])
-      .faucet(ethers.utils.parseUnits('1000', 6))
+      .faucet(ethers.utils.parseUnits('100000', 6))
     await usdToken
       .connect(wallets[4])
-      .faucet(ethers.utils.parseUnits('1000', 6))
+      .faucet(ethers.utils.parseUnits('100000', 6))
   })
 
   step('Should create fund', async () => {
@@ -58,8 +58,8 @@ describe('Fund', () => {
 
     await fund.initialize(
       1,
-      100,
-      400,
+      200,
+      2000,
       true,
       initialAum,
       wallets[1].address,
@@ -86,7 +86,7 @@ describe('Fund', () => {
   })
 
   step('Should invest client funds', async () => {
-    const amountToInvest = ethers.utils.parseUnits('100', 6)
+    const amountToInvest = ethers.utils.parseUnits('10000', 6)
     const aumBefore = await fund.aum()
     const supplyBefore = await fund.totalSupply()
     const mintedTokens = amountToInvest.mul(supplyBefore).div(aumBefore)
@@ -133,7 +133,7 @@ describe('Fund', () => {
   })
 
   step('Should Process redemption requests', async function () {
-    const amountToInvest = ethers.utils.parseUnits('100', 6)
+    const amountToInvest = ethers.utils.parseUnits('10000', 6)
 
     await usdToken
       .connect(wallets[4])
