@@ -4,6 +4,7 @@ import { ethers, network } from 'hardhat'
 import { Contract, Event } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import { step } from 'mocha-steps'
+import BigNumber from 'bignumber.js'
 
 describe('Fund', () => {
   let usdToken: Contract
@@ -107,20 +108,35 @@ describe('Fund', () => {
   })
 
   step('Should increase time and process fees', async () => {
+    expect(await usdToken.balanceOf(fund.address)).to.eq(0)
     await usdToken.approve(fund.address, ethers.constants.MaxUint256)
-    await debug()
+    const investmentTimestamp = (await fund.investments(1)).timestamp
+    const timeSkip = 2592000 // 60 * 60 * 24 * 30 = 30 days in seconds
+    const fundAmountBefore = await fund.balanceOf(wallets[2].address)
     await network.provider.request({
       method: 'evm_increaseTime',
-      params: [60 * 60 * 24 * 31],
+      params: [timeSkip],
     })
     await fund.processFees([1], ethers.constants.MaxUint256)
-    await debug()
-    await network.provider.request({
-      method: 'evm_increaseTime',
-      params: [60 * 60 * 24 * 31],
-    })
-    await fund.processFees([1], ethers.constants.MaxUint256)
-    await debug()
+    const feeTimestamp = (await ethers.provider.getBlock('latest')).timestamp
+    const mgmtFeeFundToken = new BigNumber(feeTimestamp)
+      .minus(investmentTimestamp.toString())
+      .div('31557600')
+      .times('0.02')
+      .times(fundAmountBefore.toString())
+    const mgmtFeeUsd = new BigNumber((await fund.aum()).toString())
+      .times(mgmtFeeFundToken)
+      .div((await fund.totalSupply()).toString())
+    // check usd balance of the fund
+    expect((await usdToken.balanceOf(fund.address)).toString()).to.eq(
+      mgmtFeeUsd.toFixed(0, BigNumber.ROUND_DOWN),
+    )
+    // check fund balance of the investor
+    expect((await fund.balanceOf(wallets[2].address)).toString()).to.eq(
+      new BigNumber(fundAmountBefore.toString())
+        .minus(mgmtFeeFundToken.toFixed(0, BigNumber.ROUND_DOWN))
+        .toFixed(0, BigNumber.ROUND_DOWN),
+    )
   })
 
   step('Should update AUM', async () => {
