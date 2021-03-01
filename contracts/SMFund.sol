@@ -404,6 +404,20 @@ contract SMFund is Context, ERC20 {
     emit FeesWithdrawn(to, usdAmount);
   }
 
+  function editLogo(string calldata _logoUrl) public onlyManager {
+    logoUrl = _logoUrl;
+  }
+
+  function editInvestorLimits(
+    uint256 _maxInvestors,
+    uint256 _maxInvestmentsPerInvestor,
+    uint256 _minInvestmentAmount
+  ) public onlyManager {
+    maxInvestors = _maxInvestors;
+    maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
+    minInvestmentAmount = _minInvestmentAmount;
+  }
+
   function _beforeTokenTransfer(
     address from,
     address to,
