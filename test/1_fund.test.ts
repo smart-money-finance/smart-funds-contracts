@@ -18,7 +18,12 @@ describe('Fund', () => {
     usdToken = await UsdToken.deploy()
     await usdToken.deployed()
 
-    const Factory = await ethers.getContractFactory('SMFundFactory')
+    const Library = await ethers.getContractFactory('SMFundLibrary')
+    const library = await Library.deploy()
+
+    const Factory = await ethers.getContractFactory('SMFundFactory', {
+      libraries: { SMFundLibrary: library.address },
+    })
     factory = await Factory.deploy(usdToken.address)
     await factory.deployed()
 
@@ -39,37 +44,41 @@ describe('Fund', () => {
   })
 
   step('Should create fund', async () => {
+    const initialAum = await usdToken.balanceOf(owner.address)
     const tx = await factory.newFund(
       owner.address,
-      owner.address,
-      false,
+      [false, true],
+      [1, 200, 2000, initialAum, ethers.constants.MaxUint256, 20, 5, 10000000],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
+      'Bob',
+      '0x00',
     )
     const txResp = await tx.wait()
     const fundAddress = txResp.events.find(
       (event: Event) => event.event === 'FundCreated',
     ).args.fund
     fund = await ethers.getContractAt('SMFund', fundAddress)
-  })
-
-  step('Should initialize AUM', async () => {
-    const initialAum = await usdToken.balanceOf(owner.address)
-
-    await fund.initialize(
-      1,
-      200,
-      2000,
-      true,
-      initialAum,
-      wallets[1].address,
-      'Bob',
-      ethers.constants.MaxUint256,
-      '0x00',
-    )
     expect(await fund.aum()).to.eq(initialAum)
   })
+
+  // step('Should initialize AUM', async () => {
+  //   const initialAum = await usdToken.balanceOf(owner.address)
+
+  //   await fund.initialize(
+  //     1,
+  //     200,
+  //     2000,
+  //     true,
+  //     initialAum,
+  //     wallets[1].address,
+  //     'Bob',
+  //     ethers.constants.MaxUint256,
+  //     '0x00',
+  //   )
+  //   expect(await fund.aum()).to.eq(initialAum)
+  // })
 
   step('Should whitelist clients', async () => {
     expect((await fund.whitelist(wallets[2].address)).whitelisted).to.eq(false)
@@ -167,7 +176,7 @@ describe('Fund', () => {
 
   step('Should close fund', async function () {
     await debug()
-    await fund.closeFund(ethers.constants.MaxUint256)
+    await fund.closeFund()
     await debug()
   })
 
