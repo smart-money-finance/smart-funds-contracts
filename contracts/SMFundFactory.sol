@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.6;
-pragma abicoder v2;
+pragma solidity ^0.8.1;
 
-import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 
 import './SMFund.sol';
 
-contract SMFundFactory is Context, Ownable {
-  ERC20 public immutable usdToken;
+contract SMFundFactory is Ownable {
+  ERC20 public usdToken;
   SMFund[] public funds;
 
   mapping(address => address) public managersToFunds;
@@ -31,11 +29,10 @@ contract SMFundFactory is Context, Ownable {
     string calldata initialInvestorName,
     bytes calldata signature
   ) public {
-    address manager = _msgSender();
-    require(managersToFunds[manager] == address(0), 'F0');
+    require(managersToFunds[msg.sender] == address(0), 'F0');
     SMFund fund =
       new SMFund(
-        [manager, initialInvestor],
+        [msg.sender, initialInvestor],
         boolParams,
         uintParams,
         name,
@@ -45,7 +42,7 @@ contract SMFundFactory is Context, Ownable {
         signature
       );
     funds.push(fund);
-    managersToFunds[manager] = address(fund);
+    managersToFunds[msg.sender] = address(fund);
     emit FundCreated(address(fund));
   }
 
