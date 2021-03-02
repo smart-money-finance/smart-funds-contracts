@@ -18,8 +18,11 @@ describe('Fund', () => {
     usdToken = await UsdToken.deploy();
     await usdToken.deployed();
 
+    const SMFund = await ethers.getContractFactory('SMFund');
+    const masterFundLibrary = await SMFund.deploy();
+
     const Factory = await ethers.getContractFactory('SMFundFactory');
-    factory = await Factory.deploy(usdToken.address);
+    factory = await Factory.deploy(masterFundLibrary.address, usdToken.address);
     await factory.deployed();
 
     wallets = await ethers.getSigners();

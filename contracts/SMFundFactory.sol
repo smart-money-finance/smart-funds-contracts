@@ -4,10 +4,12 @@ pragma solidity ^0.8.1;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import '@openzeppelin/contracts/proxy/Clones.sol';
 
 import './SMFund.sol';
 
 contract SMFundFactory is Ownable {
+  address public masterFundLibrary;
   ERC20 public usdToken;
   SMFund[] public funds;
 
@@ -15,7 +17,8 @@ contract SMFundFactory is Ownable {
 
   event FundCreated(address indexed fund);
 
-  constructor(ERC20 _usdToken) {
+  constructor(address _masterFundLibrary, ERC20 _usdToken) {
+    masterFundLibrary = _masterFundLibrary;
     usdToken = _usdToken;
   }
 
@@ -30,17 +33,17 @@ contract SMFundFactory is Ownable {
     bytes calldata signature
   ) public {
     require(managersToFunds[msg.sender] == address(0), 'F0');
-    SMFund fund =
-      new SMFund(
-        [msg.sender, initialInvestor],
-        boolParams,
-        uintParams,
-        name,
-        symbol,
-        logoUrl,
-        initialInvestorName,
-        signature
-      );
+    SMFund fund = SMFund(Clones.clone(masterFundLibrary));
+    fund.initialize(
+      [msg.sender, initialInvestor],
+      boolParams,
+      uintParams,
+      name,
+      symbol,
+      logoUrl,
+      initialInvestorName,
+      signature
+    );
     funds.push(fund);
     managersToFunds[msg.sender] = address(fund);
     emit FundCreated(address(fund));

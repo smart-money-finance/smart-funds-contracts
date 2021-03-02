@@ -2,8 +2,9 @@
 
 pragma solidity ^0.8.1;
 
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-import '@openzeppelin/contracts/utils/cryptography/ECDSA.sol';
+import '@openzeppelin/contracts-upgradeable/utils/Initializable.sol';
+import '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
 
 import './SMFundFactory.sol';
 
@@ -13,7 +14,7 @@ import './SMFundFactory.sol';
 // maybe link them together so client can know which ones are splits of others
 // also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
 
-contract SMFund is ERC20 {
+contract SMFund is Initializable, ERC20Upgradeable {
   SMFundFactory public factory;
   ERC20 public usdToken;
   uint8 _decimals;
@@ -84,7 +85,9 @@ contract SMFund is ERC20 {
   );
   event FeesWithdrawn(address indexed to, uint256 usdAmount);
 
-  constructor(
+  constructor() {}
+
+  function initialize(
     address[2] memory addressParams, // manager, initialInvestor
     bool[2] memory boolParams, // signedAum, investmentsEnabled
     uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
@@ -93,7 +96,8 @@ contract SMFund is ERC20 {
     string memory _logoUrl,
     string memory initialInvestorName,
     bytes memory signature
-  ) ERC20(name, symbol) onlyBefore(uintParams[4]) {
+  ) public initializer onlyBefore(uintParams[4]) {
+    __ERC20_init(name, symbol);
     require(uintParams[3] > 0, 'S0');
     factory = SMFundFactory(msg.sender);
     usdToken = factory.usdToken();
@@ -383,7 +387,10 @@ contract SMFund is ERC20 {
     } else if (sender == manager) {
       bytes32 message = keccak256(abi.encode(manager, aum, deadline));
       address signer =
-        ECDSA.recover(ECDSA.toEthSignedMessageHash(message), signature);
+        ECDSAUpgradeable.recover(
+          ECDSAUpgradeable.toEthSignedMessageHash(message),
+          signature
+        );
       require(signer == factory.owner(), 'L1');
     } else {
       require(sender == factory.owner(), 'L2');

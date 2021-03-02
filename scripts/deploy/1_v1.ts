@@ -2,8 +2,11 @@ import { run, ethers } from 'hardhat';
 
 async function main() {
   await run('compile');
+  const SMFund = await ethers.getContractFactory('SMFund');
+  const masterFundLibrary = await SMFund.deploy();
   const SMFundFactory = await ethers.getContractFactory('SMFundFactory');
   const factory = await SMFundFactory.deploy(
+    masterFundLibrary.address,
     '0xd87ba7a50b2e7e660f678a895e4b72e7cb4ccd9c',
   );
   console.log(factory.address);
