@@ -31,13 +31,12 @@ contract SMFund is Initializable, ERC20Upgradeable {
 
   uint256 public aum;
   uint256 public aumTimestamp;
-  uint256 public lastFeeTimestamp;
-  uint256 public feesInEscrow;
 
   struct Investor {
     bool whitelisted;
     string name;
   }
+
   mapping(address => Investor) public whitelist;
 
   struct Investment {
@@ -49,47 +48,33 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 lastFeeTimestamp;
     uint256 usdManagementFeesCollected;
     uint256 usdPerformanceFeesCollected;
-    uint256 investmentRequestId;
-    uint256 redemptionRequestId;
     bool redeemed;
   }
-  Investment[] public investments;
-
-  EnumerableSetUpgradeable.UintSet private activeInvestmentIds;
-  uint256 public nextFeeActiveInvestmentIndex;
-
-  uint256 private investorCount;
-  mapping(address => uint256) private activeInvestmentCountPerInvestor;
-
-  enum RequestStatus { Pending, Failed, Processed }
-
-  struct InvestmentRequest {
-    address investor;
-    uint256 usdAmount;
-    uint256 minFundAmount;
-    uint256 maxFundAmount;
-    uint256 timestamp;
-    uint256 investmentId;
-    RequestStatus status;
-  }
-  InvestmentRequest[] public investmentRequests;
-  uint256 public nextInvestmentRequestIndex;
-
-  struct RedemptionRequest {
-    address investor;
-    uint256 minUsdAmount;
-    uint256 timestamp;
-    uint256 investmentId;
-    RequestStatus status;
-  }
-  RedemptionRequest[] public redemptionRequests;
-  uint256 public nextRedemptionRequestIndex;
 
   // 27 to 32 days
   // use global last fee timestamp
   // make it optional on aum update but once started, must finish all active investment ids
   // must do redemptions first which processes fees and lowers active count
   // must do investments after which increases active count
+  Investment[] public investments;
+  mapping(address => uint256) private activeInvestmentCountPerInvestor;
+  uint256 private investorCount;
+  EnumerableSetUpgradeable.UintSet private activeInvestmentIds;
+
+  uint256 public nextFeeActiveInvestmentIndex;
+
+  // struct InvestmentRequest {
+  //   ;
+  // }
+  // InvestmentRequest[] public investmentRequests;
+  // uint256 public nextInvestmentRequestIndex;
+  // struct RedemptionRequest {
+  //   ;
+  // }
+  // RedemptionRequest[] public redemptionRequests;
+  // uint256 public nextRedemptionRequestIndex;
+
+  uint256 public lastFeeStartTimestamp;
 
   event NavUpdated(uint256 aum, uint256 totalSupply);
   event Whitelisted(address indexed investor, string name);
@@ -97,8 +82,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
   event InvestmentRequested(
     address indexed investor,
     uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 maxFundAmount,
     uint256 investmentRequestId
   );
   event InvestmentRequestFailed(
@@ -109,28 +92,21 @@ contract SMFund is Initializable, ERC20Upgradeable {
     address indexed investor,
     uint256 usdAmount,
     uint256 fundAmount,
-    uint256 investmentId,
-    uint256 investmentRequestId
+    uint256 investmentId
   );
   event RedemptionRequested(
     address indexed investor,
     uint256 minUsdAmount,
-    uint256 investmentId,
-    uint256 redemptionRequestId
+    uint256 investmentId
   );
-  event RedemptionRequestFailed(
-    address indexed investor,
-    uint256 redemptionRequestId
-  );
+  event RedemptionRequestFailed();
   event Redeemed(
     address indexed investor,
     uint256 fundAmount,
     uint256 usdAmount,
-    uint256 investmentId,
-    uint256 redemptionRequestId
+    uint256 investmentId
   );
   event FeesCollected(
-    address indexed investor,
     uint256 fundAmountManagement,
     uint256 fundAmountPerformance,
     uint256 usdAmountManagement,
@@ -151,7 +127,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
   ) public initializer onlyBefore(uintParams[4]) {
     __ERC20_init(name, symbol);
     require(uintParams[3] > 0, 'S0');
-    require(addressParams[0] != addressParams[1], 'S27');
     factory = SMFundFactory(msg.sender);
     usdToken = factory.usdToken();
     _decimals = usdToken.decimals();
@@ -226,28 +201,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
     }
   }
 
-  function requestInvestment(
-    uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 maxFundAmount,
-    uint256 deadline
-  ) public onlyWhitelisted onlyBefore(deadline) {}
-
-  function requestRedemption(
-    uint256 investmentId,
-    uint256 minUsdAmount,
-    uint256 deadline
-  ) public onlyBefore(deadline) {
-    Investment storage investment = investments[investmentId];
-    require(investment.investor == msg.sender, 'S13');
-    require(investment.redeemed == false, 'S14');
-    require(investment.timestamp + timelock <= block.timestamp, 'S15');
-    // stuff
-    // emit
-  }
-
-  ////
-
   function invest(
     uint256 usdAmount,
     uint256 minFundAmount,
@@ -301,6 +254,19 @@ contract SMFund is Initializable, ERC20Upgradeable {
     emit NavUpdated(aum, totalSupply());
   }
 
+  function requestRedemption(
+    uint256 minUsdAmount,
+    uint256[] calldata investmentIds
+  ) public onlyWhitelisted {
+    for (uint256 i = 0; i < investmentIds.length; i++) {
+      Investment storage investment = investments[investmentIds[i]];
+      require(investment.investor == msg.sender, 'S13');
+      require(investment.redeemed == false, 'S14');
+      require(investment.timestamp + timelock <= block.timestamp, 'S15');
+    }
+    emit RedemptionRequested(msg.sender, minUsdAmount, investmentIds);
+  }
+
   // used to process a redemption on the initial investment with index 0 after all other investments have been redeemed
   // does the same as the other redemptions except it doesn't transfer usd
   // all remaining aum is considered owned by the initial investor (which should be the fund manager)
@@ -340,7 +306,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
 
   function _redeem(uint256 investmentId) private returns (uint256 usdAmount) {
     Investment storage investment = investments[investmentId];
-    require(investmentId != 0, 'S21'); // TODO: change this and make this function handle last redemption?
+    require(investmentId != 0, 'S21');
     require(investment.redeemed == false, 'S22');
     require(investment.timestamp + timelock <= block.timestamp, 'S23');
     // mark investment as redeemed and lower total investment count
@@ -363,16 +329,28 @@ contract SMFund is Initializable, ERC20Upgradeable {
     );
   }
 
-  function _extractFees(uint256 investmentId) private {
-    Investment storage investment = investments[investmentId];
-    require(investment.redeemed == false, 'S24');
+  function processFees(uint256[] calldata investmentIds, uint256 deadline)
+    public
+    onlyManager
+    onlyBefore(deadline)
+  {
+    for (uint256 i = 0; i < investmentIds.length; i++) {
+      Investment storage investment = investments[investmentIds[i]];
+      require(investment.redeemed == false, 'S24');
+      require(investment.lastFeeTimestamp + 30 days <= block.timestamp, 'S25');
+      _extractFees(investmentIds[i]);
+    }
+    emit NavUpdated(aum, totalSupply());
+  }
 
+  function _extractFees(uint256 investmentId) private {
     // calculate fees in usd and fund token
     (uint256 usdManagementFee, uint256 fundManagementFee) =
       calculateManagementFee(investmentId);
     (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
       calculatePerformanceFee(investmentId);
 
+    Investment storage investment = investments[investmentId];
     // update totals stored in the investment struct
     investment.usdManagementFeesCollected += usdManagementFee;
     investment.usdPerformanceFeesCollected += usdPerformanceFee;
@@ -383,29 +361,22 @@ contract SMFund is Initializable, ERC20Upgradeable {
     // burn the two fee amounts from the investor
     _burn(investment.investor, fundManagementFee);
     _burn(investment.investor, fundPerformanceFee);
-    uint256 totalUsdFee = usdManagementFee + usdPerformanceFee;
     // decrement fund aum by the usd amounts
-    aum -= totalUsdFee;
-    // increment fees in escrow count by the usd amounts
-    feesInEscrow += totalUsdFee;
+    aum -= (usdManagementFee + usdPerformanceFee);
     // transfer usd for the two fee amounts
     usdToken.transferFrom(manager, address(this), usdManagementFee);
     usdToken.transferFrom(manager, address(this), usdPerformanceFee);
     emit FeesCollected(
-      investment.investor,
       fundManagementFee,
       fundPerformanceFee,
       usdManagementFee,
       usdPerformanceFee,
       investmentId
     );
-    emit NavUpdated(aum, totalSupply());
   }
 
   function withdrawFees(uint256 usdAmount, address to) public onlyManager {
-    // safemath on underflow will prevent withdrawing more than is owed
-    feesInEscrow -= usdAmount;
-    usdToken.transfer(to, usdAmount);
+    usdToken.transferFrom(address(this), to, usdAmount);
     emit FeesWithdrawn(to, usdAmount);
   }
 

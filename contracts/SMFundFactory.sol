@@ -24,8 +24,8 @@ contract SMFundFactory is Ownable {
 
   function newFund(
     address initialInvestor,
-    bool[2] memory boolParams, // signedAum, investmentsEnabled
     uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
+    bool signedAum,
     string memory name,
     string memory symbol,
     string calldata logoUrl,
@@ -36,8 +36,8 @@ contract SMFundFactory is Ownable {
     SMFund fund = SMFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       [msg.sender, initialInvestor],
-      boolParams,
       uintParams,
+      signedAum,
       name,
       symbol,
       logoUrl,
