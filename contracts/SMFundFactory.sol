@@ -22,19 +22,28 @@ contract SMFundFactory is Context, Ownable {
   }
 
   function newFund(
-    address manager,
-    address aumUpdater,
-    bool signedAum,
-    string calldata name,
-    string calldata symbol,
-    string calldata logoUrl
+    address initialInvestor,
+    bool[2] memory boolParams, // signedAum, investmentsEnabled
+    uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
+    string memory name,
+    string memory symbol,
+    string calldata logoUrl,
+    string calldata initialInvestorName,
+    bytes calldata signature
   ) public {
-    require(
-      managersToFunds[manager] == address(0),
-      'Manager already used for a fund'
-    );
+    address manager = _msgSender();
+    require(managersToFunds[manager] == address(0), 'F0');
     SMFund fund =
-      new SMFund(manager, aumUpdater, signedAum, name, symbol, logoUrl);
+      new SMFund(
+        [manager, initialInvestor],
+        boolParams,
+        uintParams,
+        name,
+        symbol,
+        logoUrl,
+        initialInvestorName,
+        signature
+      );
     funds.push(fund);
     managersToFunds[manager] = address(fund);
     emit FundCreated(address(fund));
