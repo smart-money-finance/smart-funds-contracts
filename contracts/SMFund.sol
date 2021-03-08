@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.6;
-pragma abicoder v2;
+pragma solidity ^0.8.1;
 
-import '@openzeppelin/contracts/GSN/Context.sol';
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts-upgradeable/utils/Initializable.sol';
+import '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
 
 import './SMFundFactory.sol';
-import './SMFundLibrary.sol';
 
 // TODO:
 // figure out how to allow selling of parts of investments
@@ -16,11 +14,10 @@ import './SMFundLibrary.sol';
 // maybe link them together so client can know which ones are splits of others
 // also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
 
-contract SMFund is Context, ERC20 {
-  using SafeMath for uint256;
-
+contract SMFund is Initializable, ERC20Upgradeable {
   SMFundFactory public factory;
   ERC20 public usdToken;
+  uint8 _decimals;
   address public manager;
   uint256 public timelock;
   uint256 public managementFee; // basis points per year
@@ -41,6 +38,18 @@ contract SMFund is Context, ERC20 {
   }
 
   mapping(address => Investor) public whitelist;
+
+  struct Investment {
+    address investor;
+    uint256 initialUsdAmount;
+    uint256 usdManagementFeesCollected;
+    uint256 usdPerformanceFeesCollected;
+    uint256 initialFundAmount;
+    uint256 fundAmount;
+    uint256 timestamp;
+    uint256 lastFeeTimestamp;
+    bool redeemed;
+  }
 
   Investment[] public investments;
   uint256 public activeInvestmentCount;
@@ -76,7 +85,9 @@ contract SMFund is Context, ERC20 {
   );
   event FeesWithdrawn(address indexed to, uint256 usdAmount);
 
-  constructor(
+  constructor() {}
+
+  function initialize(
     address[2] memory addressParams, // manager, initialInvestor
     bool[2] memory boolParams, // signedAum, investmentsEnabled
     uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
@@ -85,11 +96,12 @@ contract SMFund is Context, ERC20 {
     string memory _logoUrl,
     string memory initialInvestorName,
     bytes memory signature
-  ) ERC20(name, symbol) onlyBefore(uintParams[4]) {
+  ) public initializer onlyBefore(uintParams[4]) {
+    __ERC20_init(name, symbol);
     require(uintParams[3] > 0, 'S0');
-    factory = SMFundFactory(_msgSender());
+    factory = SMFundFactory(msg.sender);
     usdToken = factory.usdToken();
-    _setupDecimals(usdToken.decimals());
+    _decimals = usdToken.decimals();
     manager = addressParams[0];
     signedAum = boolParams[0];
     investmentsEnabled = boolParams[1];
@@ -102,21 +114,11 @@ contract SMFund is Context, ERC20 {
     logoUrl = _logoUrl;
     _addToWhitelist(addressParams[1], initialInvestorName);
     _addInvestment(addressParams[1], uintParams[3], 1);
-    if (boolParams[0]) {
-      SMFundLibrary.verifyAumSignature(
-        boolParams[0],
-        addressParams[0],
-        factory.owner(),
-        addressParams[0],
-        aum,
-        uintParams[4],
-        signature
-      );
-    }
+    verifyAumSignature(manager, uintParams[4], signature);
   }
 
   modifier onlyManager() {
-    require(_msgSender() == manager, 'S1');
+    require(msg.sender == manager, 'S1');
     _;
   }
 
@@ -126,13 +128,17 @@ contract SMFund is Context, ERC20 {
   }
 
   modifier onlyWhitelisted() {
-    require(whitelist[_msgSender()].whitelisted == true, 'S3');
+    require(whitelist[msg.sender].whitelisted == true, 'S3');
     _;
   }
 
   modifier onlyBefore(uint256 deadline) {
     require(block.timestamp <= deadline, 'S4');
     _;
+  }
+
+  function decimals() public view override returns (uint8) {
+    return _decimals;
   }
 
   function updateAum(
@@ -142,15 +148,7 @@ contract SMFund is Context, ERC20 {
   ) public onlyBefore(deadline) {
     aum = _aum;
     aumTimestamp = block.timestamp;
-    SMFundLibrary.verifyAumSignature(
-      signedAum,
-      _msgSender(),
-      factory.owner(),
-      manager,
-      aum,
-      deadline,
-      signature
-    );
+    verifyAumSignature(msg.sender, deadline, signature);
     emit NavUpdated(_aum, totalSupply());
   }
 
@@ -186,7 +184,7 @@ contract SMFund is Context, ERC20 {
     uint256 minFundAmount,
     uint256 deadline
   ) public onlyInvestmentsEnabled onlyWhitelisted onlyBefore(deadline) {
-    _addInvestment(_msgSender(), usdAmount, minFundAmount);
+    _addInvestment(msg.sender, usdAmount, minFundAmount);
   }
 
   function _addInvestment(
@@ -204,16 +202,16 @@ contract SMFund is Context, ERC20 {
     uint256 fundAmount;
     // if intialization investment, use price of 1 cent
     if (investmentId == 0) {
-      fundAmount = usdAmount.mul(100);
+      fundAmount = usdAmount * 100;
     } else {
-      fundAmount = usdAmount.mul(totalSupply()).div(aum);
+      fundAmount = (usdAmount * totalSupply()) / aum;
     }
     require(fundAmount >= minFundAmount, 'S12');
     // don't transfer tokens if it's the initialization investment
     if (investmentId != 0) {
       usdToken.transferFrom(investor, manager, usdAmount);
     }
-    aum = aum.add(usdAmount);
+    aum += usdAmount;
     _mint(investor, fundAmount);
     investments.push(
       Investment({
@@ -238,14 +236,13 @@ contract SMFund is Context, ERC20 {
     uint256 minUsdAmount,
     uint256[] calldata investmentIds
   ) public onlyInvestmentsEnabled onlyWhitelisted {
-    address sender = _msgSender();
     for (uint256 i = 0; i < investmentIds.length; i++) {
       Investment storage investment = investments[investmentIds[i]];
-      require(investment.investor == sender, 'S13');
+      require(investment.investor == msg.sender, 'S13');
       require(investment.redeemed == false, 'S14');
-      require(investment.timestamp.add(timelock) <= block.timestamp, 'S15');
+      require(investment.timestamp + timelock <= block.timestamp, 'S15');
     }
-    emit RedemptionRequested(sender, minUsdAmount, investmentIds);
+    emit RedemptionRequested(msg.sender, minUsdAmount, investmentIds);
   }
 
   // used to process a redemption on the initial investment with index 0 after all other investments have been redeemed
@@ -256,7 +253,7 @@ contract SMFund is Context, ERC20 {
     require(activeInvestmentCount == 1, 'S16');
     Investment storage investment = investments[0];
     require(investment.redeemed == false, 'S17');
-    require(investment.timestamp.add(timelock) <= block.timestamp, 'S18');
+    require(investment.timestamp + timelock <= block.timestamp, 'S18');
     _extractFees(0);
     investment.redeemed = true;
     activeInvestmentCount--;
@@ -279,7 +276,7 @@ contract SMFund is Context, ERC20 {
       Investment storage investment = investments[investmentIds[i]];
       require(investment.investor == investor, 'S19');
       _extractFees(investmentIds[i]);
-      usdAmount = _redeem(investmentIds[i]).add(usdAmount);
+      usdAmount += _redeem(investmentIds[i]);
     }
     require(usdAmount >= minUsdAmount, 'S20');
     emit NavUpdated(aum, totalSupply());
@@ -289,17 +286,17 @@ contract SMFund is Context, ERC20 {
     Investment storage investment = investments[investmentId];
     require(investmentId != 0, 'S21');
     require(investment.redeemed == false, 'S22');
-    require(investment.timestamp.add(timelock) <= block.timestamp, 'S23');
+    require(investment.timestamp + timelock <= block.timestamp, 'S23');
     // mark investment as redeemed and lower total investment count
     investment.redeemed = true;
     activeInvestmentCount--;
     activeInvestmentCountPerInvestor[investment.investor]--;
     // calculate usd value of the current fundAmount remaining in the investment
-    usdAmount = investment.fundAmount.mul(aum).div(totalSupply());
+    usdAmount = (investment.fundAmount * aum) / totalSupply();
     // burn fund tokens
     _burn(investment.investor, investment.fundAmount);
     // subtract usd amount from aum
-    aum = aum.sub(usdAmount);
+    aum -= usdAmount;
     // transfer usd to investor
     usdToken.transferFrom(manager, investment.investor, usdAmount);
     emit Redeemed(
@@ -319,10 +316,7 @@ contract SMFund is Context, ERC20 {
     for (uint256 i = 0; i < investmentIds.length; i++) {
       Investment storage investment = investments[investmentIds[i]];
       require(investment.redeemed == false, 'S24');
-      require(
-        investment.lastFeeTimestamp.add(30 days) <= block.timestamp,
-        'S25'
-      );
+      require(investment.lastFeeTimestamp + 30 days <= block.timestamp, 'S25');
       _extractFees(investmentIds[i]);
     }
     emit NavUpdated(aum, totalSupply());
@@ -337,15 +331,9 @@ contract SMFund is Context, ERC20 {
 
     Investment storage investment = investments[investmentId];
     // update totals stored in the investment struct
-    investment.usdManagementFeesCollected = investment
-      .usdManagementFeesCollected
-      .add(usdManagementFee);
-    investment.usdPerformanceFeesCollected = investment
-      .usdPerformanceFeesCollected
-      .add(usdPerformanceFee);
-    investment.fundAmount = investment.fundAmount.sub(fundManagementFee).sub(
-      fundPerformanceFee
-    );
+    investment.usdManagementFeesCollected += usdManagementFee;
+    investment.usdPerformanceFeesCollected += usdPerformanceFee;
+    investment.fundAmount -= (fundManagementFee + fundPerformanceFee);
     investment.lastFeeTimestamp = block.timestamp;
 
     // 2 burns and 2 transfers are done so events show up separately on etherscan and elsewhere which makes matching them up with what the UI shows a lot easier
@@ -353,7 +341,7 @@ contract SMFund is Context, ERC20 {
     _burn(investment.investor, fundManagementFee);
     _burn(investment.investor, fundPerformanceFee);
     // decrement fund aum by the usd amounts
-    aum = aum.sub(usdManagementFee).sub(usdPerformanceFee);
+    aum -= (usdManagementFee + usdPerformanceFee);
     // transfer usd for the two fee amounts
     usdToken.transferFrom(manager, address(this), usdManagementFee);
     usdToken.transferFrom(manager, address(this), usdPerformanceFee);
@@ -364,35 +352,6 @@ contract SMFund is Context, ERC20 {
       usdPerformanceFee,
       investmentId
     );
-  }
-
-  function calculateManagementFee(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdManagementFee, uint256 fundManagementFee)
-  {
-    Investment storage investment = investments[investmentId];
-    (usdManagementFee, fundManagementFee) = SMFundLibrary
-      .calculateManagementFee(investment, managementFee, aum, totalSupply());
-  }
-
-  function calculatePerformanceFee(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdPerformanceFee, uint256 fundPerformanceFee)
-  {
-    Investment storage investment = investments[investmentId];
-    (usdPerformanceFee, fundPerformanceFee) = SMFundLibrary
-      .calculatePerformanceFee(investment, performanceFee, aum, totalSupply());
-  }
-
-  function highWaterMark(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdValue)
-  {
-    Investment storage investment = investments[investmentId];
-    usdValue = SMFundLibrary.highWaterMark(investment, performanceFee);
   }
 
   function withdrawFees(
@@ -416,6 +375,80 @@ contract SMFund is Context, ERC20 {
     maxInvestors = _maxInvestors;
     maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
     minInvestmentAmount = _minInvestmentAmount;
+  }
+
+  function verifyAumSignature(
+    address sender,
+    uint256 deadline,
+    bytes memory signature
+  ) public view {
+    if (!signedAum) {
+      require(sender == manager, 'L0');
+    } else if (sender == manager) {
+      bytes32 message = keccak256(abi.encode(manager, aum, deadline));
+      address signer =
+        ECDSAUpgradeable.recover(
+          ECDSAUpgradeable.toEthSignedMessageHash(message),
+          signature
+        );
+      require(signer == factory.owner(), 'L1');
+    } else {
+      require(sender == factory.owner(), 'L2');
+    }
+  }
+
+  function calculateManagementFee(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdManagementFee, uint256 fundManagementFee)
+  {
+    Investment storage investment = investments[investmentId];
+    // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
+    fundManagementFee =
+      ((block.timestamp - investment.timestamp) *
+        managementFee *
+        investment.fundAmount) /
+      365.25 days /
+      10000; // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000
+
+    // calculate the usd value of the management fee being pulled
+    usdManagementFee = (fundManagementFee * aum) / totalSupply();
+  }
+
+  function calculatePerformanceFee(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdPerformanceFee, uint256 fundPerformanceFee)
+  {
+    Investment storage investment = investments[investmentId];
+    // usd value of the investment
+    uint256 currentUsdValue = (aum * investment.fundAmount) / totalSupply();
+    uint256 totalUsdPerformanceFee = 0;
+    if (currentUsdValue > investment.initialUsdAmount) {
+      // calculate current performance fee from initial usd value of investment to current usd value
+      totalUsdPerformanceFee =
+        ((currentUsdValue - investment.initialUsdAmount) * performanceFee) /
+        10000;
+    }
+    // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
+    if (totalUsdPerformanceFee > investment.usdPerformanceFeesCollected) {
+      usdPerformanceFee =
+        totalUsdPerformanceFee -
+        investment.usdPerformanceFeesCollected;
+      fundPerformanceFee = (totalSupply() * usdPerformanceFee) / aum;
+    }
+  }
+
+  function highWaterMark(uint256 investmentId)
+    public
+    view
+    returns (uint256 usdValue)
+  {
+    Investment storage investment = investments[investmentId];
+    usdValue =
+      (investment.usdPerformanceFeesCollected * 10000) /
+      performanceFee +
+      investment.initialUsdAmount;
   }
 
   function _beforeTokenTransfer(

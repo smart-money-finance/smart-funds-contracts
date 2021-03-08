@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.6;
-pragma abicoder v2;
+pragma solidity ^0.8.1;
 
-import '@openzeppelin/contracts/GSN/Context.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import '@openzeppelin/contracts/proxy/Clones.sol';
 
 import './SMFund.sol';
 
-contract SMFundFactory is Context, Ownable {
-  ERC20 public immutable usdToken;
+contract SMFundFactory is Ownable {
+  address public masterFundLibrary;
+  ERC20 public usdToken;
   SMFund[] public funds;
 
   mapping(address => address) public managersToFunds;
 
   event FundCreated(address indexed fund);
 
-  constructor(ERC20 _usdToken) {
+  constructor(address _masterFundLibrary, ERC20 _usdToken) {
+    masterFundLibrary = _masterFundLibrary;
     usdToken = _usdToken;
   }
 
@@ -31,21 +32,20 @@ contract SMFundFactory is Context, Ownable {
     string calldata initialInvestorName,
     bytes calldata signature
   ) public {
-    address manager = _msgSender();
-    require(managersToFunds[manager] == address(0), 'F0');
-    SMFund fund =
-      new SMFund(
-        [manager, initialInvestor],
-        boolParams,
-        uintParams,
-        name,
-        symbol,
-        logoUrl,
-        initialInvestorName,
-        signature
-      );
+    require(managersToFunds[msg.sender] == address(0), 'F0');
+    SMFund fund = SMFund(Clones.clone(masterFundLibrary));
+    fund.initialize(
+      [msg.sender, initialInvestor],
+      boolParams,
+      uintParams,
+      name,
+      symbol,
+      logoUrl,
+      initialInvestorName,
+      signature
+    );
     funds.push(fund);
-    managersToFunds[manager] = address(fund);
+    managersToFunds[msg.sender] = address(fund);
     emit FundCreated(address(fund));
   }
 
