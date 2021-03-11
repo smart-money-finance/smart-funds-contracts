@@ -1,6 +1,6 @@
-import 'dotenv/config'
-import '@nomiclabs/hardhat-waffle'
-import { HardhatUserConfig } from 'hardhat/config'
+import 'dotenv/config';
+import '@nomiclabs/hardhat-waffle';
+import { HardhatUserConfig } from 'hardhat/config';
 
 const config: HardhatUserConfig = {
   networks: {
@@ -14,9 +14,9 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: '0.8.1',
+    version: '0.8.2',
     settings: { optimizer: { enabled: true, runs: 200 } },
   },
-}
+};
 
-export default config
+export default config;

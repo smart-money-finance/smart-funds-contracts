@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.1;
+pragma solidity ^0.8.2;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
@@ -32,7 +32,7 @@ contract SMFundFactory is Ownable {
     string calldata initialInvestorName,
     bytes calldata signature
   ) public {
-    require(managersToFunds[msg.sender] == address(0), 'F0');
+    require(managersToFunds[msg.sender] == address(0), 'F0'); // This address already manages a fund
     SMFund fund = SMFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       [msg.sender, initialInvestor],

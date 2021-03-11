@@ -461,10 +461,10 @@
   resolved "https://registry.yarnpkg.com/@openzeppelin/contracts-upgradeable/-/contracts-upgradeable-4.0.0-beta.0.tgz#f4d4eafa44837c5c4570afc4da9f064c7c15a00c"
   integrity sha512-bVk/SK6911W0bUVygpqblaJRTij9GpZ+3mn/tW/H2nLl2yz83cvw/e8sXgYJBhClhWL/JlX6FmXmaim877Mr9w==
 
-"@openzeppelin/contracts@^4.0.0-beta.1":
-  version "4.0.0-beta.1"
-  resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.0.0-beta.1.tgz#23476cf3e4e3fdd9deb246457e7edea4aebe7228"
-  integrity sha512-O+zuP2DbZPHlX/ViTmewpVU12k7vi4YU6fzWRXDKzJql7RHF5mFOL/z3cILp4iVoz8wH+drFYXnQMaj8/Sc0BQ==
+"@openzeppelin/contracts@^4.0.0-rc.0":
+  version "4.0.0-rc.0"
+  resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.0.0-rc.0.tgz#daa9bb22dadf1d1434a96b7fa820c67357a1ac6f"
+  integrity sha512-206BCKet16fUrgYE2zP6L+wtMTbPjN3GmyqSJdRXeF0qw5MdUS0TIy/p3VHVX2+btSwslDyNrB70SN70RUDJQg==
 
 "@resolver-engine/core@^0.3.3":
   version "0.3.3"

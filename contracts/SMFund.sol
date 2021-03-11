@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.1;
+pragma solidity ^0.8.2;
 
 import '@openzeppelin/contracts-upgradeable/utils/Initializable.sol';
 import '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
@@ -16,9 +16,9 @@ import './SMFundFactory.sol';
 // also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
 
 contract SMFund is Initializable, ERC20Upgradeable {
-  SMFundFactory private factory;
-  ERC20 private usdToken;
-  uint8 private _decimals;
+  SMFundFactory internal factory;
+  ERC20 internal usdToken;
+  uint8 internal _decimals;
   address public manager;
   uint256 public timelock;
   uint256 public managementFee; // basis points per year
@@ -33,6 +33,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
   uint256 public aumTimestamp;
   uint256 public lastFeeTimestamp;
   uint256 public feesInEscrow;
+  bool public processingRequestsAndFees;
 
   struct Investor {
     bool whitelisted;
@@ -55,11 +56,11 @@ contract SMFund is Initializable, ERC20Upgradeable {
   }
   Investment[] public investments;
 
-  EnumerableSetUpgradeable.UintSet private activeInvestmentIds;
+  EnumerableSetUpgradeable.UintSet internal activeInvestmentIds;
   uint256 public nextFeeActiveInvestmentIndex;
 
-  uint256 private investorCount;
-  mapping(address => uint256) private activeInvestmentCountPerInvestor;
+  uint256 internal investorCount;
+  mapping(address => uint256) internal activeInvestmentCountPerInvestor;
 
   enum RequestStatus { Pending, Failed, Processed }
 
@@ -69,6 +70,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 minFundAmount;
     uint256 maxFundAmount;
     uint256 timestamp;
+    uint256 deadline;
     uint256 investmentId;
     RequestStatus status;
   }
@@ -84,12 +86,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
   }
   RedemptionRequest[] public redemptionRequests;
   uint256 public nextRedemptionRequestIndex;
-
-  // 27 to 32 days
-  // use global last fee timestamp
-  // make it optional on aum update but once started, must finish all active investment ids
-  // must do redemptions first which processes fees and lowers active count
-  // must do investments after which increases active count
 
   event NavUpdated(uint256 aum, uint256 totalSupply);
   event Whitelisted(address indexed investor, string name);
@@ -150,8 +146,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     bytes memory signature
   ) public initializer onlyBefore(uintParams[4]) {
     __ERC20_init(name, symbol);
-    require(uintParams[3] > 0, 'S0');
-    require(addressParams[0] != addressParams[1], 'S27');
+    require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
     factory = SMFundFactory(msg.sender);
     usdToken = factory.usdToken();
     _decimals = usdToken.decimals();
@@ -165,22 +160,30 @@ contract SMFund is Initializable, ERC20Upgradeable {
     minInvestmentAmount = uintParams[7];
     logoUrl = _logoUrl;
     _addToWhitelist(addressParams[1], initialInvestorName);
-    _addInvestment(addressParams[1], uintParams[3], 1);
+    _addInvestmentRequest(
+      addressParams[1],
+      uintParams[3],
+      1,
+      type(uint256).max,
+      block.timestamp,
+      false
+    );
+    _addInvestment(0);
     verifyAumSignature(manager, uintParams[4], signature);
   }
 
   modifier onlyManager() {
-    require(msg.sender == manager, 'S1');
+    require(msg.sender == manager, 'S1'); // Fund manager only
     _;
   }
 
   modifier onlyWhitelisted() {
-    require(whitelist[msg.sender].whitelisted == true, 'S3');
+    require(whitelist[msg.sender].whitelisted, 'S3'); // Whitelisted investors only
     _;
   }
 
   modifier onlyBefore(uint256 deadline) {
-    require(block.timestamp <= deadline, 'S4');
+    require(block.timestamp <= deadline, 'S4'); // Transaction mined after deadline
     _;
   }
 
@@ -191,12 +194,85 @@ contract SMFund is Initializable, ERC20Upgradeable {
   function updateAum(
     uint256 _aum,
     uint256 deadline,
+    bool processFees,
+    uint256 processCount,
+    uint256 earlyRedemptionCount,
     bytes calldata signature
   ) public onlyBefore(deadline) {
+    require(!processingRequestsAndFees, ''); // Can't update AUM until finished processing requests and fees
+    require(!processFees || block.timestamp > lastFeeTimestamp + 27 days, ''); // Can't process fees until 27 days have passed
     aum = _aum;
     aumTimestamp = block.timestamp;
     verifyAumSignature(msg.sender, deadline, signature);
     emit NavUpdated(_aum, totalSupply());
+    if (processFees || block.timestamp > lastFeeTimestamp + 32 days) {
+      lastFeeTimestamp = block.timestamp;
+    }
+    processingRequestsAndFees = true;
+    _processRequestsAndFees(processCount, earlyRedemptionCount);
+  }
+
+  function processRequestsAndFees(
+    uint256 processCount,
+    uint256 earlyRedemptionCount
+  ) public onlyManager {
+    require(processingRequestsAndFees, ''); // Not currently processing requests and fees
+    _processRequestsAndFees(processCount, earlyRedemptionCount);
+  }
+
+  function _processRequestsAndFees(
+    uint256 processCount,
+    uint256 earlyRedemptionCount
+  ) internal {
+    // first process redemptions
+    // TODO: may need this if statement to prevent indexing out of bounds in storage, add back if it reverts the tx
+    // if (nextRedemptionRequestIndex < redemptionRequests.length) {
+    RedemptionRequest storage redemptionRequest =
+      redemptionRequests[nextRedemptionRequestIndex];
+    while (
+      nextRedemptionRequestIndex < redemptionRequests.length &&
+      (redemptionRequest.timestamp + 6 days < aumTimestamp ||
+        (earlyRedemptionCount > 0 &&
+          redemptionRequest.timestamp < aumTimestamp))
+    ) {
+      if (processCount == 0) return;
+      _redeem(nextRedemptionRequestIndex);
+      redemptionRequest = redemptionRequests[nextRedemptionRequestIndex++];
+      if (earlyRedemptionCount > 0) {
+        earlyRedemptionCount--;
+      }
+      processCount--;
+    }
+    // }
+    // then process fees
+    if (lastFeeTimestamp == aumTimestamp) {
+      while (
+        nextFeeActiveInvestmentIndex <
+        EnumerableSetUpgradeable.length(activeInvestmentIds)
+      ) {
+        if (processCount == 0) return;
+        uint256 investmentId =
+          EnumerableSetUpgradeable.at(
+            activeInvestmentIds,
+            nextFeeActiveInvestmentIndex
+          );
+        Investment storage investment = investments[investmentId];
+        if (investment.timestamp + 30 days < lastFeeTimestamp) {
+          _processFees(investmentId);
+        }
+        nextFeeActiveInvestmentIndex++;
+        processCount--;
+      }
+    }
+    // and finally process investments
+    while (nextInvestmentRequestIndex < investmentRequests.length) {
+      if (processCount == 0) return;
+      _addInvestment(nextInvestmentRequestIndex);
+      nextInvestmentRequestIndex++;
+      processCount--;
+    }
+    nextFeeActiveInvestmentIndex = 0;
+    processingRequestsAndFees = false;
   }
 
   function whitelistMulti(address[] calldata investors, string[] calldata names)
@@ -208,9 +284,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
     }
   }
 
-  function _addToWhitelist(address investor, string memory name) private {
-    require(investorCount < maxInvestors, 'S5');
-    require(!whitelist[investor].whitelisted, 'S6');
+  function _addToWhitelist(address investor, string memory name) internal {
+    require(investorCount < maxInvestors, 'S5'); // Too many investors
+    require(!whitelist[investor].whitelisted, 'S6'); // Investor is already whitelisted
+    require(investor != manager, 'S31'); // Manager can't be investor
     investorCount++;
     whitelist[investor] = Investor({ whitelisted: true, name: name });
     emit Whitelisted(investor, name);
@@ -218,8 +295,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
 
   function blacklistMulti(address[] calldata investors) public onlyManager {
     for (uint256 i = 0; i < investors.length; i++) {
-      require(activeInvestmentCountPerInvestor[investors[i]] == 0, 'S7');
-      require(whitelist[investors[i]].whitelisted, 'S8');
+      require(activeInvestmentCountPerInvestor[investors[i]] == 0, 'S7'); // Investor has open investments
+      require(whitelist[investors[i]].whitelisted, 'S8'); // Investor isn't whitelisted
       investorCount--;
       delete whitelist[investors[i]];
       emit Blacklisted(investors[i]);
@@ -230,8 +307,75 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 usdAmount,
     uint256 minFundAmount,
     uint256 maxFundAmount,
+    uint256 investmentDeadline,
     uint256 deadline
-  ) public onlyWhitelisted onlyBefore(deadline) {}
+  ) public onlyWhitelisted onlyBefore(deadline) {
+    _addInvestmentRequest(
+      msg.sender,
+      usdAmount,
+      minFundAmount,
+      maxFundAmount,
+      investmentDeadline,
+      true
+    );
+  }
+
+  function _addInvestmentRequest(
+    address investor,
+    uint256 usdAmount,
+    uint256 minFundAmount,
+    uint256 maxFundAmount,
+    uint256 investmentDeadline,
+    bool transferTokens
+  ) internal {
+    require(
+      activeInvestmentCountPerInvestor[investor] < maxInvestmentsPerInvestor,
+      'S11' // Investor has reached max investment limit
+    );
+    require(usdAmount >= minInvestmentAmount, 'S9'); // Less than minimum investment amount
+    require(minFundAmount > 0, 'S10'); // Minimum fund amount returned must be greater than 0
+    require(investmentDeadline > block.timestamp + 24 hours, ''); // Investment deadline too short
+    investmentRequests.push(
+      InvestmentRequest({
+        investor: investor,
+        usdAmount: usdAmount,
+        minFundAmount: minFundAmount,
+        maxFundAmount: maxFundAmount,
+        timestamp: block.timestamp,
+        deadline: investmentDeadline,
+        investmentId: 0,
+        status: RequestStatus.Pending
+      })
+    );
+    if (transferTokens) {
+      usdToken.transferFrom(investor, address(this), usdAmount);
+    }
+    emit InvestmentRequested(
+      investor,
+      usdAmount,
+      minFundAmount,
+      maxFundAmount,
+      investmentRequests.length - 1
+    );
+  }
+
+  function cancelInvestmentRequest(
+    uint256 investmentRequestId,
+    uint256 deadline
+  ) public onlyWhitelisted onlyBefore(deadline) {
+    InvestmentRequest storage investmentRequest =
+      investmentRequests[investmentRequestId];
+    require(investmentRequest.status == RequestStatus.Pending, ''); // Investment request is no longer pending
+    require(investmentRequest.investor == msg.sender, ''); // Investor doesn't own that investment request
+    require(investmentRequest.deadline < block.timestamp, ''); // Investment request isn't past deadline
+    investmentRequest.status = RequestStatus.Failed;
+    // send the escrow funds back
+    usdToken.transfer(investmentRequest.investor, investmentRequest.usdAmount);
+    emit InvestmentRequestFailed(
+      investmentRequest.investor,
+      investmentRequestId
+    );
+  }
 
   function requestRedemption(
     uint256 investmentId,
@@ -239,139 +383,202 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 deadline
   ) public onlyBefore(deadline) {
     Investment storage investment = investments[investmentId];
-    require(investment.investor == msg.sender, 'S13');
-    require(investment.redeemed == false, 'S14');
-    require(investment.timestamp + timelock <= block.timestamp, 'S15');
-    // stuff
-    // emit
-  }
-
-  ////
-
-  function invest(
-    uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 deadline
-  ) public onlyWhitelisted onlyBefore(deadline) {
-    _addInvestment(msg.sender, usdAmount, minFundAmount);
-  }
-
-  function _addInvestment(
-    address investor,
-    uint256 usdAmount,
-    uint256 minFundAmount
-  ) internal {
-    require(usdAmount >= minInvestmentAmount, 'S9');
-    require(minFundAmount > 0, 'S10');
+    require(investment.investor == msg.sender, 'S13'); // Investor does not own that investment
+    require(investment.redeemed == false, 'S14'); // Investment already redeemed
+    require(investment.timestamp + timelock <= block.timestamp, 'S15'); // Investment is still locked up
+    require(minUsdAmount > 0, ''); // Min amount must be greater than 0
     require(
-      activeInvestmentCountPerInvestor[investor] < maxInvestmentsPerInvestor,
-      'S11'
-    );
-    uint256 investmentId = investments.length;
-    uint256 fundAmount;
-    // if intialization investment, use price of 1 cent
-    if (investmentId == 0) {
-      fundAmount = usdAmount * 100;
-    } else {
-      fundAmount = (usdAmount * totalSupply()) / aum;
+      EnumerableSetUpgradeable.length(activeInvestmentIds) == 1 ||
+        investmentId != 0,
+      ''
+    ); // Initial investment can only be redeemed after all other investments
+    uint256 redemptionRequestId = redemptionRequests.length;
+    if (redemptionRequestId > 0) {
+      RedemptionRequest storage redemptionRequest =
+        redemptionRequests[investment.redemptionRequestId];
+      require(
+        redemptionRequest.investmentId != investmentId ||
+          redemptionRequest.status == RequestStatus.Failed,
+        ''
+      ); // Investment already has an open redemption request
     }
-    require(fundAmount >= minFundAmount, 'S12');
-    // don't transfer tokens if it's the initialization investment
-    if (investmentId != 0) {
-      usdToken.transferFrom(investor, manager, usdAmount);
-    }
-    aum += usdAmount;
-    _mint(investor, fundAmount);
-    investments.push(
-      Investment({
-        investor: investor,
-        initialUsdAmount: usdAmount,
-        usdManagementFeesCollected: 0,
-        usdPerformanceFeesCollected: 0,
-        initialFundAmount: fundAmount,
-        fundAmount: fundAmount,
+    investment.redemptionRequestId = redemptionRequestId;
+    redemptionRequests.push(
+      RedemptionRequest({
+        investor: msg.sender,
+        minUsdAmount: minUsdAmount,
         timestamp: block.timestamp,
-        lastFeeTimestamp: block.timestamp,
-        redeemed: false
+        investmentId: investmentId,
+        status: RequestStatus.Pending
       })
     );
-    EnumerableSetUpgradeable.add(activeInvestmentIds, investmentId);
-    activeInvestmentCountPerInvestor[investor]++;
-    emit Invested(investor, usdAmount, fundAmount, investmentId);
-    emit NavUpdated(aum, totalSupply());
-  }
-
-  // used to process a redemption on the initial investment with index 0 after all other investments have been redeemed
-  // does the same as the other redemptions except it doesn't transfer usd
-  // all remaining aum is considered owned by the initial investor (which should be the fund manager)
-  function closeFund() public onlyManager {
-    // close out fund, don't transfer any AUM, let the fund manager do it manually
-    require(EnumerableSetUpgradeable.length(activeInvestmentIds) == 1, 'S16');
-    Investment storage investment = investments[0];
-    require(investment.redeemed == false, 'S17');
-    require(investment.timestamp + timelock <= block.timestamp, 'S18');
-    _extractFees(0);
-    investment.redeemed = true;
-    EnumerableSetUpgradeable.remove(activeInvestmentIds, 0);
-    activeInvestmentCountPerInvestor[investment.investor]--;
-    _burn(investment.investor, investment.fundAmount);
-    uint256 finalAum = aum;
-    aum = 0;
-    emit Redeemed(investment.investor, investment.fundAmount, finalAum, 0);
-    emit NavUpdated(aum, totalSupply());
-  }
-
-  function processRedemptions(
-    uint256[] calldata investmentIds,
-    uint256 minUsdAmount,
-    uint256 deadline
-  ) public onlyManager onlyBefore(deadline) {
-    address investor = investments[investmentIds[0]].investor;
-    uint256 usdAmount = 0;
-    for (uint256 i = 0; i < investmentIds.length; i++) {
-      Investment storage investment = investments[investmentIds[i]];
-      require(investment.investor == investor, 'S19');
-      _extractFees(investmentIds[i]);
-      usdAmount += _redeem(investmentIds[i]);
-    }
-    require(usdAmount >= minUsdAmount, 'S20');
-    emit NavUpdated(aum, totalSupply());
-  }
-
-  function _redeem(uint256 investmentId) private returns (uint256 usdAmount) {
-    Investment storage investment = investments[investmentId];
-    require(investmentId != 0, 'S21'); // TODO: change this and make this function handle last redemption?
-    require(investment.redeemed == false, 'S22');
-    require(investment.timestamp + timelock <= block.timestamp, 'S23');
-    // mark investment as redeemed and lower total investment count
-    investment.redeemed = true;
-    EnumerableSetUpgradeable.remove(activeInvestmentIds, investmentId);
-    activeInvestmentCountPerInvestor[investment.investor]--;
-    // calculate usd value of the current fundAmount remaining in the investment
-    usdAmount = (investment.fundAmount * aum) / totalSupply();
-    // burn fund tokens
-    _burn(investment.investor, investment.fundAmount);
-    // subtract usd amount from aum
-    aum -= usdAmount;
-    // transfer usd to investor
-    usdToken.transferFrom(manager, investment.investor, usdAmount);
-    emit Redeemed(
-      investment.investor,
-      investment.fundAmount,
-      usdAmount,
-      investmentId
+    emit RedemptionRequested(
+      msg.sender,
+      minUsdAmount,
+      investmentId,
+      redemptionRequestId
     );
   }
 
-  function _extractFees(uint256 investmentId) private {
-    Investment storage investment = investments[investmentId];
-    require(investment.redeemed == false, 'S24');
+  function _addInvestment(uint256 investmentRequestId) internal {
+    InvestmentRequest storage investmentRequest =
+      investmentRequests[investmentRequestId];
 
+    // if the investor already withdrew his investment after the deadline
+    if (investmentRequest.status == RequestStatus.Failed) {
+      return;
+    }
+
+    // only process if within the deadline, otherwise fallback to failure below
+    if (investmentRequest.deadline >= block.timestamp) {
+      uint256 investmentId = investments.length;
+      uint256 fundAmount;
+      // if intialization investment, use price of 1 cent
+      if (investmentId == 0) {
+        fundAmount = investmentRequest.usdAmount * 100;
+      } else {
+        fundAmount = (investmentRequest.usdAmount * totalSupply()) / aum;
+      }
+      if (
+        fundAmount >= investmentRequest.minFundAmount &&
+        fundAmount <= investmentRequest.maxFundAmount
+      ) {
+        // investment succeeds
+        investmentRequest.status = RequestStatus.Processed;
+        investmentRequest.investmentId = investmentId;
+        // don't transfer tokens if it's the initialization investment
+        if (investmentId != 0) {
+          usdToken.transfer(manager, investmentRequest.usdAmount);
+        }
+        aum += investmentRequest.usdAmount;
+        _mint(investmentRequest.investor, fundAmount);
+        investments.push(
+          Investment({
+            investor: investmentRequest.investor,
+            initialUsdAmount: investmentRequest.usdAmount,
+            initialFundAmount: fundAmount,
+            fundAmount: fundAmount,
+            timestamp: block.timestamp,
+            lastFeeTimestamp: block.timestamp,
+            usdManagementFeesCollected: 0,
+            usdPerformanceFeesCollected: 0,
+            investmentRequestId: investmentRequestId,
+            redemptionRequestId: 0,
+            redeemed: false
+          })
+        );
+        EnumerableSetUpgradeable.add(activeInvestmentIds, investmentId);
+        activeInvestmentCountPerInvestor[investmentRequest.investor]++;
+        emit Invested(
+          investmentRequest.investor,
+          investmentRequest.usdAmount,
+          fundAmount,
+          investmentId,
+          investmentRequestId
+        );
+        emit NavUpdated(aum, totalSupply());
+        return;
+      }
+    }
+    // investment fails
+    investmentRequest.status = RequestStatus.Failed;
+    // send the escrow funds back
+    usdToken.transfer(investmentRequest.investor, investmentRequest.usdAmount);
+    emit InvestmentRequestFailed(
+      investmentRequest.investor,
+      investmentRequestId
+    );
+  }
+
+  function _redeem(uint256 redemptionRequestId) internal {
+    RedemptionRequest storage redemptionRequest =
+      redemptionRequests[redemptionRequestId];
+    Investment storage investment = investments[redemptionRequest.investmentId];
+    if (!investment.redeemed) {
+      // calculate fees in usd and fund token
+      (uint256 usdManagementFee, uint256 fundManagementFee) =
+        calculateManagementFee(redemptionRequest.investmentId);
+      (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
+        calculatePerformanceFee(redemptionRequest.investmentId);
+
+      // calculate usd value of the current fundAmount remaining in the investment
+      uint256 usdAmount =
+        ((investment.fundAmount - (fundManagementFee + fundPerformanceFee)) *
+          aum) / totalSupply();
+      if (usdAmount >= redemptionRequest.minUsdAmount) {
+        // success
+        // extract fees
+        _extractFees(
+          redemptionRequest.investmentId,
+          usdManagementFee,
+          fundManagementFee,
+          usdPerformanceFee,
+          fundPerformanceFee
+        );
+        // mark investment as redeemed and lower total investment count
+        investment.redeemed = true;
+        EnumerableSetUpgradeable.remove(
+          activeInvestmentIds,
+          redemptionRequest.investmentId
+        );
+        activeInvestmentCountPerInvestor[investment.investor]--;
+        redemptionRequest.status = RequestStatus.Processed;
+        // burn fund tokens
+        _burn(investment.investor, investment.fundAmount);
+        // subtract usd amount from aum
+        aum -= usdAmount;
+        if (redemptionRequest.investmentId != 0) {
+          // transfer usd to investor
+          require(
+            usdToken.balanceOf(manager) >= usdAmount &&
+              usdToken.allowance(manager, address(this)) >= usdAmount,
+            ''
+          ); // Not enough usd tokens available and approved
+          usdToken.transferFrom(manager, investment.investor, usdAmount);
+        }
+        emit Redeemed(
+          investment.investor,
+          investment.fundAmount,
+          usdAmount,
+          redemptionRequest.investmentId,
+          redemptionRequestId
+        );
+        emit NavUpdated(aum, totalSupply());
+        return;
+      }
+    }
+    // fail
+    redemptionRequest.status = RequestStatus.Failed;
+    emit RedemptionRequestFailed(
+      redemptionRequest.investor,
+      redemptionRequestId
+    );
+  }
+
+  function _processFees(uint256 investmentId) internal {
     // calculate fees in usd and fund token
     (uint256 usdManagementFee, uint256 fundManagementFee) =
       calculateManagementFee(investmentId);
     (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
       calculatePerformanceFee(investmentId);
+
+    _extractFees(
+      investmentId,
+      usdManagementFee,
+      fundManagementFee,
+      usdPerformanceFee,
+      fundPerformanceFee
+    );
+  }
+
+  function _extractFees(
+    uint256 investmentId,
+    uint256 usdManagementFee,
+    uint256 fundManagementFee,
+    uint256 usdPerformanceFee,
+    uint256 fundPerformanceFee
+  ) internal {
+    Investment storage investment = investments[investmentId];
 
     // update totals stored in the investment struct
     investment.usdManagementFeesCollected += usdManagementFee;
@@ -384,6 +591,11 @@ contract SMFund is Initializable, ERC20Upgradeable {
     _burn(investment.investor, fundManagementFee);
     _burn(investment.investor, fundPerformanceFee);
     uint256 totalUsdFee = usdManagementFee + usdPerformanceFee;
+    require(
+      usdToken.balanceOf(manager) >= totalUsdFee &&
+        usdToken.allowance(manager, address(this)) >= totalUsdFee,
+      ''
+    ); // Not enough usd tokens available and approved
     // decrement fund aum by the usd amounts
     aum -= totalUsdFee;
     // increment fees in escrow count by the usd amounts
@@ -427,9 +639,9 @@ contract SMFund is Initializable, ERC20Upgradeable {
     address sender,
     uint256 deadline,
     bytes memory signature
-  ) private view {
+  ) internal view {
     if (!signedAum) {
-      require(sender == manager, 'L0');
+      require(sender == manager, 'S28'); // Fund manager only
     } else if (sender == manager) {
       bytes32 message = keccak256(abi.encode(manager, aum, deadline));
       address signer =
@@ -437,9 +649,9 @@ contract SMFund is Initializable, ERC20Upgradeable {
           ECDSAUpgradeable.toEthSignedMessageHash(message),
           signature
         );
-      require(signer == factory.owner(), 'L1');
+      require(signer == factory.owner(), 'S29'); // AUM signer mismatch
     } else {
-      require(sender == factory.owner(), 'L2');
+      require(sender == factory.owner(), 'S30'); // AUM signer only
     }
   }
 
@@ -503,6 +715,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 amount
   ) internal virtual override {
     super._beforeTokenTransfer(from, to, amount);
-    require(from == address(0) || to == address(0), 'S26');
+    require(from == address(0) || to == address(0), 'S26'); // Token is not transferable
   }
 }
