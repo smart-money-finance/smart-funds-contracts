@@ -1,11 +1,13 @@
 import { describe, before } from 'mocha';
-import { expect } from 'chai';
+import { expect, use } from 'chai';
 import { ethers, network } from 'hardhat';
 import { Contract, Event } from 'ethers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 import { step } from 'mocha-steps';
 import BigNumber from 'bignumber.js';
+import { solidity } from 'ethereum-waffle';
 
+use(solidity);
 describe('Fund', () => {
   let usdToken: Contract;
   let factory: Contract;
@@ -101,6 +103,12 @@ describe('Fund', () => {
     expect(await usdToken.balanceOf(fund.address)).to.eq(0);
     await usdToken.approve(fund.address, ethers.constants.MaxUint256);
     const investmentTimestamp = (await fund.investments(1)).timestamp;
+
+    // Expect failure if fees withdrawn before 30 days
+    await expect(
+      fund.processFees([1], ethers.constants.MaxUint256),
+    ).to.be.revertedWith('revert S25');
+
     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
     const fundAmountBefore = await fund.balanceOf(wallets[2].address);
     await network.provider.request({
