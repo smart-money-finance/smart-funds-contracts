@@ -3,6 +3,7 @@
   "L1": "AUM signer mismatch",
   "L2": "AUM signer only",
   "F0": "This address already manages a fund",
+  "F1": "Only callable by funds",
   "S0": "Initial AUM must be greater than 0",
   "S1": "Fund manager only",
   "S2": "Investments are disabled",

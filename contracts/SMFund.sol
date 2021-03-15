@@ -25,15 +25,23 @@ contract SMFund is Initializable, ERC20Upgradeable {
   uint256 public performanceFee; // basis points
   bool public signedAum;
   string public logoUrl;
+  string public contactInfo;
   uint256 public maxInvestors;
   uint256 public maxInvestmentsPerInvestor;
   uint256 public minInvestmentAmount; // in usd token decimals
 
   uint256 public aum;
-  uint256 public aumTimestamp;
-  uint256 public lastFeeTimestamp;
-  uint256 public feesInEscrow;
-  bool public processingRequestsAndFees;
+  uint256 public aumTimestamp; // block timestamp of last aum update
+  // uint256 public aumAverage; // average aum since the last fee sweep
+  // uint256 public aumAverageCount; // number of aum updates since the last fee sweep
+  uint256 public globalHighWaterPrice; // highest ((aum * 10^18) / supply)
+  uint256 public globalHighWaterPriceTimestamp; // timestamp of highest price
+  uint256 public highWaterPriceSinceLastFee; // highest price * 10^18 since last fee sweep
+  uint256 public highWaterPriceTimestampSinceLastFee; // timestamp of highest price since last fee sweep
+  uint256 public lastFeeTimestamp; // timestamp of the start of the last fee update
+  bool public processingRequestsAndFees; // whether the fund manager is in the middle of processing requests and/or fees
+  uint256 public processingRedemptionsEarlyCount; // how many redemption requests the fund manager wants to process early this time
+  uint256 public feesInEscrow; // keeps track of all usd held by fund contract that are from fees as opposed to investment requests
 
   struct Investor {
     bool whitelisted;
@@ -48,6 +56,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 fundAmount;
     uint256 timestamp;
     uint256 lastFeeTimestamp;
+    uint256 highWaterPrice; // highest fund price while this investment has been active * 10^18
+    uint256 highWaterPriceTimestamp;
     uint256 usdManagementFeesCollected;
     uint256 usdPerformanceFeesCollected;
     uint256 investmentRequestId;
@@ -134,6 +144,9 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 investmentId
   );
   event FeesWithdrawn(address indexed to, uint256 usdAmount);
+  event NewGlobalHighWaterPrice(uint256 indexed price);
+  event StartedProcessingRequestsAndFees();
+  event DoneProcessingRequestsAndFees();
 
   function initialize(
     address[2] memory addressParams, // manager, initialInvestor
@@ -142,6 +155,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     string memory name,
     string memory symbol,
     string memory _logoUrl,
+    string memory _contactInfo,
     string memory initialInvestorName,
     bytes memory signature
   ) public initializer onlyBefore(uintParams[4]) {
@@ -159,17 +173,20 @@ contract SMFund is Initializable, ERC20Upgradeable {
     maxInvestmentsPerInvestor = uintParams[6];
     minInvestmentAmount = uintParams[7];
     logoUrl = _logoUrl;
+    contactInfo = _contactInfo;
     _addToWhitelist(addressParams[1], initialInvestorName);
     _addInvestmentRequest(
       addressParams[1],
       uintParams[3],
       1,
       type(uint256).max,
-      block.timestamp,
-      false
+      block.timestamp
     );
     _addInvestment(0);
     verifyAumSignature(manager, uintParams[4], signature);
+    globalHighWaterPrice = (aum * 1e18) / totalSupply();
+    globalHighWaterPriceTimestamp = block.timestamp;
+    emit NewGlobalHighWaterPrice(globalHighWaterPrice);
   }
 
   modifier onlyManager() {
@@ -203,27 +220,44 @@ contract SMFund is Initializable, ERC20Upgradeable {
     require(!processFees || block.timestamp > lastFeeTimestamp + 27 days, ''); // Can't process fees until 27 days have passed
     aum = _aum;
     aumTimestamp = block.timestamp;
+    // update the rolling average
+    // if (aumAverageCount > 0) {
+    //   aumAverage =
+    //     (aumAverage * aumAverageCount + _aum) /
+    //     (aumAverageCount + 1);
+    // } else {
+    //   aumAverage = _aum;
+    // }
+    // aumAverageCount++;
     verifyAumSignature(msg.sender, deadline, signature);
-    emit NavUpdated(_aum, totalSupply());
+    uint256 supply = totalSupply();
+    emit NavUpdated(_aum, supply);
+    uint256 price = (aum * 1e18) / supply;
+    if (price > globalHighWaterPrice) {
+      globalHighWaterPrice = price;
+      globalHighWaterPriceTimestamp = block.timestamp;
+      emit NewGlobalHighWaterPrice(globalHighWaterPrice);
+    }
+    if (price > highWaterPriceSinceLastFee) {
+      highWaterPriceSinceLastFee = price;
+      highWaterPriceTimestampSinceLastFee = block.timestamp;
+    }
     if (processFees || block.timestamp > lastFeeTimestamp + 32 days) {
       lastFeeTimestamp = block.timestamp;
+      // aumAverageCount = 0;
     }
     processingRequestsAndFees = true;
-    _processRequestsAndFees(processCount, earlyRedemptionCount);
+    processingRedemptionsEarlyCount = earlyRedemptionCount;
+    emit StartedProcessingRequestsAndFees();
+    _processRequestsAndFees(processCount);
   }
 
-  function processRequestsAndFees(
-    uint256 processCount,
-    uint256 earlyRedemptionCount
-  ) public onlyManager {
+  function processRequestsAndFees(uint256 processCount) public onlyManager {
     require(processingRequestsAndFees, ''); // Not currently processing requests and fees
-    _processRequestsAndFees(processCount, earlyRedemptionCount);
+    _processRequestsAndFees(processCount);
   }
 
-  function _processRequestsAndFees(
-    uint256 processCount,
-    uint256 earlyRedemptionCount
-  ) internal {
+  function _processRequestsAndFees(uint256 processCount) internal {
     // first process redemptions
     // TODO: may need this if statement to prevent indexing out of bounds in storage, add back if it reverts the tx
     // if (nextRedemptionRequestIndex < redemptionRequests.length) {
@@ -232,16 +266,16 @@ contract SMFund is Initializable, ERC20Upgradeable {
     while (
       nextRedemptionRequestIndex < redemptionRequests.length &&
       (redemptionRequest.timestamp + 6 days < aumTimestamp ||
-        (earlyRedemptionCount > 0 &&
+        (processingRedemptionsEarlyCount > 0 &&
           redemptionRequest.timestamp < aumTimestamp))
     ) {
       if (processCount == 0) return;
       _redeem(nextRedemptionRequestIndex);
       redemptionRequest = redemptionRequests[nextRedemptionRequestIndex++];
-      if (earlyRedemptionCount > 0) {
-        earlyRedemptionCount--;
-      }
       processCount--;
+      if (processingRedemptionsEarlyCount > 0) {
+        processingRedemptionsEarlyCount--;
+      }
     }
     // }
     // then process fees
@@ -271,8 +305,13 @@ contract SMFund is Initializable, ERC20Upgradeable {
       nextInvestmentRequestIndex++;
       processCount--;
     }
+    if (lastFeeTimestamp == aumTimestamp) {
+      highWaterPriceSinceLastFee = 0;
+      highWaterPriceTimestampSinceLastFee = 0;
+    }
     nextFeeActiveInvestmentIndex = 0;
     processingRequestsAndFees = false;
+    emit DoneProcessingRequestsAndFees();
   }
 
   function whitelistMulti(address[] calldata investors, string[] calldata names)
@@ -315,8 +354,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
       usdAmount,
       minFundAmount,
       maxFundAmount,
-      investmentDeadline,
-      true
+      investmentDeadline
     );
   }
 
@@ -325,8 +363,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 usdAmount,
     uint256 minFundAmount,
     uint256 maxFundAmount,
-    uint256 investmentDeadline,
-    bool transferTokens
+    uint256 investmentDeadline
   ) internal {
     require(
       activeInvestmentCountPerInvestor[investor] < maxInvestmentsPerInvestor,
@@ -347,8 +384,9 @@ contract SMFund is Initializable, ERC20Upgradeable {
         status: RequestStatus.Pending
       })
     );
-    if (transferTokens) {
-      usdToken.transferFrom(investor, address(this), usdAmount);
+    // only skip transferring on the initial investment
+    if (investmentRequests.length > 1) {
+      factory.usdTransferFrom(investor, address(this), usdAmount);
     }
     emit InvestmentRequested(
       investor,
@@ -452,6 +490,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
         }
         aum += investmentRequest.usdAmount;
         _mint(investmentRequest.investor, fundAmount);
+
         investments.push(
           Investment({
             investor: investmentRequest.investor,
@@ -460,6 +499,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
             fundAmount: fundAmount,
             timestamp: block.timestamp,
             lastFeeTimestamp: block.timestamp,
+            highWaterPrice: (aum * 1e18) / totalSupply(),
+            highWaterPriceTimestamp: block.timestamp,
             usdManagementFeesCollected: 0,
             usdPerformanceFeesCollected: 0,
             investmentRequestId: investmentRequestId,
@@ -531,10 +572,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
           // transfer usd to investor
           require(
             usdToken.balanceOf(manager) >= usdAmount &&
-              usdToken.allowance(manager, address(this)) >= usdAmount,
+              usdToken.allowance(manager, address(factory)) >= usdAmount,
             ''
           ); // Not enough usd tokens available and approved
-          usdToken.transferFrom(manager, investment.investor, usdAmount);
+          factory.usdTransferFrom(manager, investment.investor, usdAmount);
         }
         emit Redeemed(
           investment.investor,
@@ -585,6 +626,12 @@ contract SMFund is Initializable, ERC20Upgradeable {
     investment.usdPerformanceFeesCollected += usdPerformanceFee;
     investment.fundAmount -= (fundManagementFee + fundPerformanceFee);
     investment.lastFeeTimestamp = block.timestamp;
+    if (
+      investment.timestamp < lastFeeTimestamp &&
+      highWaterPriceSinceLastFee > investment.highWaterPrice
+    ) {
+      investment.highWaterPrice = highWaterPriceSinceLastFee;
+    }
 
     // 2 burns and 2 transfers are done so events show up separately on etherscan and elsewhere which makes matching them up with what the UI shows a lot easier
     // burn the two fee amounts from the investor
@@ -593,7 +640,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 totalUsdFee = usdManagementFee + usdPerformanceFee;
     require(
       usdToken.balanceOf(manager) >= totalUsdFee &&
-        usdToken.allowance(manager, address(this)) >= totalUsdFee,
+        usdToken.allowance(manager, address(factory)) >= totalUsdFee,
       ''
     ); // Not enough usd tokens available and approved
     // decrement fund aum by the usd amounts
@@ -601,8 +648,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     // increment fees in escrow count by the usd amounts
     feesInEscrow += totalUsdFee;
     // transfer usd for the two fee amounts
-    usdToken.transferFrom(manager, address(this), usdManagementFee);
-    usdToken.transferFrom(manager, address(this), usdPerformanceFee);
+    factory.usdTransferFrom(manager, address(this), usdManagementFee);
+    factory.usdTransferFrom(manager, address(this), usdPerformanceFee);
     emit FeesCollected(
       investment.investor,
       fundManagementFee,
@@ -623,6 +670,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
 
   function editLogo(string calldata _logoUrl) public onlyManager {
     logoUrl = _logoUrl;
+  }
+
+  function editContactInfo(string calldata _contactInfo) public onlyManager {
+    contactInfo = _contactInfo;
   }
 
   function editInvestorLimits(
@@ -663,7 +714,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     Investment storage investment = investments[investmentId];
     // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
     fundManagementFee =
-      ((block.timestamp - investment.timestamp) *
+      ((block.timestamp - investment.lastFeeTimestamp) *
         managementFee *
         investment.fundAmount) /
       365.25 days /
@@ -679,13 +730,13 @@ contract SMFund is Initializable, ERC20Upgradeable {
     returns (uint256 usdPerformanceFee, uint256 fundPerformanceFee)
   {
     Investment storage investment = investments[investmentId];
-    // usd value of the investment
-    uint256 currentUsdValue = (aum * investment.fundAmount) / totalSupply();
+    // usd value of the investment at the high water mark
+    uint256 usdValue = highWaterMark(investmentId);
     uint256 totalUsdPerformanceFee = 0;
-    if (currentUsdValue > investment.initialUsdAmount) {
+    if (usdValue > investment.initialUsdAmount) {
       // calculate current performance fee from initial usd value of investment to current usd value
       totalUsdPerformanceFee =
-        ((currentUsdValue - investment.initialUsdAmount) * performanceFee) /
+        ((usdValue - investment.initialUsdAmount) * performanceFee) /
         10000;
     }
     // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
@@ -703,10 +754,16 @@ contract SMFund is Initializable, ERC20Upgradeable {
     returns (uint256 usdValue)
   {
     Investment storage investment = investments[investmentId];
-    usdValue =
-      (investment.usdPerformanceFeesCollected * 10000) /
-      performanceFee +
-      investment.initialUsdAmount;
+    uint256 price;
+    if (
+      investment.timestamp < lastFeeTimestamp &&
+      highWaterPriceSinceLastFee > investment.highWaterPrice
+    ) {
+      price = highWaterPriceSinceLastFee;
+    } else {
+      price = investment.highWaterPrice;
+    }
+    usdValue = (price * investment.fundAmount) / 1e18;
   }
 
   function _beforeTokenTransfer(
