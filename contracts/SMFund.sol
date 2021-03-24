@@ -180,12 +180,16 @@ contract SMFund is Initializable, ERC20Upgradeable {
       uintParams[3],
       1,
       type(uint256).max,
-      block.timestamp
+      block.timestamp + 24 hours
     );
     _addInvestment(0);
+    nextInvestmentRequestIndex = 1;
     verifyAumSignature(manager, uintParams[4], signature);
     globalHighWaterPrice = (aum * 1e18) / totalSupply();
+    highWaterPriceSinceLastFee = globalHighWaterPrice;
     globalHighWaterPriceTimestamp = block.timestamp;
+    highWaterPriceTimestampSinceLastFee = block.timestamp;
+    lastFeeTimestamp = block.timestamp;
     emit NewGlobalHighWaterPrice(globalHighWaterPrice);
   }
 
@@ -216,8 +220,11 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 earlyRedemptionCount,
     bytes calldata signature
   ) public onlyBefore(deadline) {
-    require(!processingRequestsAndFees, ''); // Can't update AUM until finished processing requests and fees
-    require(!processFees || block.timestamp > lastFeeTimestamp + 27 days, ''); // Can't process fees until 27 days have passed
+    require(!processingRequestsAndFees, 'S32'); // Can't update AUM until finished processing requests and fees
+    require(
+      !processFees || block.timestamp > lastFeeTimestamp + 27 days,
+      'S33'
+    ); // Can't process fees until 27 days have passed
     aum = _aum;
     aumTimestamp = block.timestamp;
     // update the rolling average
@@ -253,31 +260,30 @@ contract SMFund is Initializable, ERC20Upgradeable {
   }
 
   function processRequestsAndFees(uint256 processCount) public onlyManager {
-    require(processingRequestsAndFees, ''); // Not currently processing requests and fees
+    require(processingRequestsAndFees, 'S34'); // Not currently processing requests and fees
     _processRequestsAndFees(processCount);
   }
 
   function _processRequestsAndFees(uint256 processCount) internal {
     // first process redemptions
-    // TODO: may need this if statement to prevent indexing out of bounds in storage, add back if it reverts the tx
-    // if (nextRedemptionRequestIndex < redemptionRequests.length) {
-    RedemptionRequest storage redemptionRequest =
-      redemptionRequests[nextRedemptionRequestIndex];
-    while (
-      nextRedemptionRequestIndex < redemptionRequests.length &&
-      (redemptionRequest.timestamp + 6 days < aumTimestamp ||
-        (processingRedemptionsEarlyCount > 0 &&
-          redemptionRequest.timestamp < aumTimestamp))
-    ) {
-      if (processCount == 0) return;
-      _redeem(nextRedemptionRequestIndex);
-      redemptionRequest = redemptionRequests[nextRedemptionRequestIndex++];
-      processCount--;
-      if (processingRedemptionsEarlyCount > 0) {
-        processingRedemptionsEarlyCount--;
+    if (nextRedemptionRequestIndex < redemptionRequests.length) {
+      RedemptionRequest storage redemptionRequest =
+        redemptionRequests[nextRedemptionRequestIndex];
+      while (
+        nextRedemptionRequestIndex < redemptionRequests.length &&
+        (redemptionRequest.timestamp + 6 days < aumTimestamp ||
+          (processingRedemptionsEarlyCount > 0 &&
+            redemptionRequest.timestamp < aumTimestamp))
+      ) {
+        if (processCount == 0) return;
+        _redeem(nextRedemptionRequestIndex);
+        redemptionRequest = redemptionRequests[nextRedemptionRequestIndex++];
+        processCount--;
+        if (processingRedemptionsEarlyCount > 0) {
+          processingRedemptionsEarlyCount--;
+        }
       }
     }
-    // }
     // then process fees
     if (lastFeeTimestamp == aumTimestamp) {
       while (
@@ -371,7 +377,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     );
     require(usdAmount >= minInvestmentAmount, 'S9'); // Less than minimum investment amount
     require(minFundAmount > 0, 'S10'); // Minimum fund amount returned must be greater than 0
-    require(investmentDeadline > block.timestamp + 24 hours, ''); // Investment deadline too short
+    require(investmentDeadline >= block.timestamp + 24 hours, 'S35'); // Investment deadline too short
     investmentRequests.push(
       InvestmentRequest({
         investor: investor,
@@ -403,9 +409,9 @@ contract SMFund is Initializable, ERC20Upgradeable {
   ) public onlyWhitelisted onlyBefore(deadline) {
     InvestmentRequest storage investmentRequest =
       investmentRequests[investmentRequestId];
-    require(investmentRequest.status == RequestStatus.Pending, ''); // Investment request is no longer pending
-    require(investmentRequest.investor == msg.sender, ''); // Investor doesn't own that investment request
-    require(investmentRequest.deadline < block.timestamp, ''); // Investment request isn't past deadline
+    require(investmentRequest.status == RequestStatus.Pending, 'S36'); // Investment request is no longer pending
+    require(investmentRequest.investor == msg.sender, 'S37'); // Investor doesn't own that investment request
+    require(investmentRequest.deadline < block.timestamp, 'S38'); // Investment request isn't past deadline
     investmentRequest.status = RequestStatus.Failed;
     // send the escrow funds back
     usdToken.transfer(investmentRequest.investor, investmentRequest.usdAmount);
@@ -424,11 +430,11 @@ contract SMFund is Initializable, ERC20Upgradeable {
     require(investment.investor == msg.sender, 'S13'); // Investor does not own that investment
     require(investment.redeemed == false, 'S14'); // Investment already redeemed
     require(investment.timestamp + timelock <= block.timestamp, 'S15'); // Investment is still locked up
-    require(minUsdAmount > 0, ''); // Min amount must be greater than 0
+    require(minUsdAmount > 0, 'S39'); // Min amount must be greater than 0
     require(
       EnumerableSetUpgradeable.length(activeInvestmentIds) == 1 ||
         investmentId != 0,
-      ''
+      'S40'
     ); // Initial investment can only be redeemed after all other investments
     uint256 redemptionRequestId = redemptionRequests.length;
     if (redemptionRequestId > 0) {
@@ -437,7 +443,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
       require(
         redemptionRequest.investmentId != investmentId ||
           redemptionRequest.status == RequestStatus.Failed,
-        ''
+        'S41'
       ); // Investment already has an open redemption request
     }
     investment.redemptionRequestId = redemptionRequestId;
@@ -573,7 +579,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
           require(
             usdToken.balanceOf(manager) >= usdAmount &&
               usdToken.allowance(manager, address(factory)) >= usdAmount,
-            ''
+            'S42'
           ); // Not enough usd tokens available and approved
           factory.usdTransferFrom(manager, investment.investor, usdAmount);
         }
@@ -641,7 +647,7 @@ contract SMFund is Initializable, ERC20Upgradeable {
     require(
       usdToken.balanceOf(manager) >= totalUsdFee &&
         usdToken.allowance(manager, address(factory)) >= totalUsdFee,
-      ''
+      'S43'
     ); // Not enough usd tokens available and approved
     // decrement fund aum by the usd amounts
     aum -= totalUsdFee;
