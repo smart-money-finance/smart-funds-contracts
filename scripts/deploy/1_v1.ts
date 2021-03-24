@@ -7,7 +7,8 @@ async function main() {
   const SMFundFactory = await ethers.getContractFactory('SMFundFactory');
   const factory = await SMFundFactory.deploy(
     masterFundLibrary.address,
-    '0xd87ba7a50b2e7e660f678a895e4b72e7cb4ccd9c',
+    '0xde637d4c445ca2aae8f782ffac8d2971b93a4998', // goerli
+    // '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // mainnet
   );
   console.log(factory.address);
 }

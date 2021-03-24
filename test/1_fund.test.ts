@@ -81,6 +81,11 @@ describe('Fund', () => {
     expect((await fund.whitelist(wallets[1].address)).name).to.eq('Bob');
     expect(await fund.globalHighWaterPrice()).to.eq(initalPrice);
     expect(await fund.highWaterPriceSinceLastFee()).to.eq(initalPrice);
+    expect(await fund.activeInvestmentCount()).to.eq(1);
+    expect(
+      await fund.activeInvestmentCountPerInvestor(wallets[1].address),
+    ).to.eq(1);
+    expect(await fund.investorCount()).to.eq(1);
   });
 
   step('Should whitelist clients', async () => {
@@ -93,6 +98,7 @@ describe('Fund', () => {
       ['Sam', 'Bill', 'Jim'],
     );
 
+    expect(await fund.investorCount()).to.eq(4);
     expect((await fund.whitelist(wallets[2].address)).whitelisted).to.eq(true);
     expect((await fund.whitelist(wallets[2].address)).name).to.eq('Sam');
     expect((await fund.whitelist(wallets[3].address)).whitelisted).to.eq(true);
@@ -199,6 +205,10 @@ describe('Fund', () => {
       });
       expect(await usdToken.balanceOf(fund.address)).to.eq(0);
       expect(await fund.balanceOf(request.investor)).to.eq(fundMinted);
+      expect(await fund.activeInvestmentCount()).to.eq(2);
+      expect(
+        await fund.activeInvestmentCountPerInvestor(wallets[2].address),
+      ).to.eq(1);
     },
   );
 
