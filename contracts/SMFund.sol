@@ -69,8 +69,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
   EnumerableSetUpgradeable.UintSet internal activeInvestmentIds;
   uint256 public nextFeeActiveInvestmentIndex;
 
-  uint256 internal investorCount;
-  mapping(address => uint256) internal activeInvestmentCountPerInvestor;
+  uint256 public investorCount;
+  mapping(address => uint256) public activeInvestmentCountPerInvestor;
 
   enum RequestStatus { Pending, Failed, Processed }
 
@@ -770,6 +770,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
       price = investment.highWaterPrice;
     }
     usdValue = (price * investment.fundAmount) / 1e18;
+  }
+
+  function activeInvestmentCount() public view returns (uint256) {
+    return EnumerableSetUpgradeable.length(activeInvestmentIds);
   }
 
   function _beforeTokenTransfer(
