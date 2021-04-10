@@ -2,6 +2,8 @@ import 'dotenv/config';
 import '@nomiclabs/hardhat-waffle';
 import { HardhatUserConfig } from 'hardhat/config';
 
+require('@nomiclabs/hardhat-truffle5');
+
 const config: HardhatUserConfig = {
   networks: {
     goerli: {
@@ -14,7 +16,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: '0.8.2',
+    version: '0.8.3',
     settings: { optimizer: { enabled: true, runs: 200 } },
   },
 };
