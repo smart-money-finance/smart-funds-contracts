@@ -1,11 +1,13 @@
 import { describe, before } from 'mocha';
-import { expect } from 'chai';
+import { expect, use } from 'chai';
 import { ethers, network } from 'hardhat';
 import { Contract, Event } from 'ethers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 import { step } from 'mocha-steps';
 import BigNumber from 'bignumber.js';
+import { solidity } from 'ethereum-waffle';
 
+use(solidity);
 describe('Fund', () => {
   let usdToken: Contract;
   let factory: Contract;
