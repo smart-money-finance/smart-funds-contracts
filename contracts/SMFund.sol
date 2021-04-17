@@ -273,7 +273,10 @@ contract SMFund is Initializable, FeeDividendToken {
     emit Whitelisted(investor, name);
   }
 
-  function blacklistMulti(address[] calldata investors) public onlyManager {
+  function blacklistMultiAndForceRedeem(
+    address[] calldata investors,
+    uint256[] calldata investmentIdsToRedeem
+  ) public onlyManager {
     for (uint256 i = 0; i < investors.length; i++) {
       require(
         activeAndPendingInvestmentCountPerInvestor[investors[i]] == 0,
@@ -283,6 +286,9 @@ contract SMFund is Initializable, FeeDividendToken {
       investorCount--;
       delete whitelist[investors[i]];
       emit Blacklisted(investors[i]);
+    }
+    for (uint256 i = 0; i < investmentIdsToRedeem.length; i++) {
+      _addRedemptionRequest(investmentIdsToRedeem[i], 1);
     }
   }
 
@@ -376,6 +382,13 @@ contract SMFund is Initializable, FeeDividendToken {
   ) public onlyBefore(deadline) {
     Investment storage investment = investments[investmentId];
     require(investment.investor == msg.sender, 'S13'); // Investor does not own that investment
+    _addRedemptionRequest(investmentId, minUsdAmount);
+  }
+
+  function _addRedemptionRequest(uint256 investmentId, uint256 minUsdAmount)
+    internal
+  {
+    Investment storage investment = investments[investmentId];
     require(investment.redeemed == false, 'S14'); // Investment already redeemed
     require(investment.timestamp + timelock <= block.timestamp, 'S15'); // Investment is still locked up
     require(minUsdAmount > 0, 'S39'); // Min amount must be greater than 0
@@ -398,7 +411,7 @@ contract SMFund is Initializable, FeeDividendToken {
     investment.redemptionRequestId = redemptionRequestId;
     redemptionRequests.push(
       RedemptionRequest({
-        investor: msg.sender,
+        investor: investment.investor,
         minUsdAmount: minUsdAmount,
         timestamp: block.timestamp,
         investmentId: investmentId,
@@ -406,7 +419,7 @@ contract SMFund is Initializable, FeeDividendToken {
       })
     );
     emit RedemptionRequested(
-      msg.sender,
+      investment.investor,
       minUsdAmount,
       investmentId,
       redemptionRequestId
@@ -421,7 +434,10 @@ contract SMFund is Initializable, FeeDividendToken {
       return;
     }
     // only process if within the deadline, otherwise fallback to failure below
-    if (investmentRequest.deadline >= block.timestamp) {
+    if (
+      investmentRequest.deadline >= block.timestamp &&
+      whitelist[investmentRequest.investor].whitelisted
+    ) {
       uint256 investmentId = investments.length;
       uint256 fundAmount;
       // if intialization investment, use price of 1 cent
