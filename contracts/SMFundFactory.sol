@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.3;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
@@ -9,12 +9,18 @@ import '@openzeppelin/contracts/proxy/Clones.sol';
 import './SMFund.sol';
 
 contract SMFundFactory is Ownable {
-  address public masterFundLibrary;
+  address internal masterFundLibrary;
   ERC20 public usdToken;
   SMFund[] public funds;
 
-  mapping(address => address) public managersToFunds;
+  struct Manager {
+    bool whitelisted;
+    string name;
+  }
+  mapping(address => Manager) public managerWhitelist;
+  mapping(address => address) public managerToFund;
 
+  event ManagerWhitelisted(address indexed manager, string name);
   event FundCreated(address indexed fund);
 
   constructor(address _masterFundLibrary, ERC20 _usdToken) {
@@ -24,16 +30,17 @@ contract SMFundFactory is Ownable {
 
   function newFund(
     address initialInvestor,
-    uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
+    uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
     bool signedAum,
     string memory name,
     string memory symbol,
     string memory logoUrl,
     string memory contactInfo,
     string memory initialInvestorName,
+    string memory tags,
     bytes memory signature
   ) public {
-    require(managersToFunds[msg.sender] == address(0), 'F0'); // This address already manages a fund
+    require(managerToFund[msg.sender] == address(0), 'F0'); // This address already manages a fund
     SMFund fund = SMFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       [msg.sender, initialInvestor],
@@ -44,19 +51,12 @@ contract SMFundFactory is Ownable {
       logoUrl,
       contactInfo,
       initialInvestorName,
+      tags,
       signature
     );
     funds.push(fund);
-    managersToFunds[msg.sender] = address(fund);
+    managerToFund[msg.sender] = address(fund);
     emit FundCreated(address(fund));
-  }
-
-  function allFunds() public view returns (SMFund[] memory) {
-    return funds;
-  }
-
-  function fundsLength() public view returns (uint256) {
-    return funds.length;
   }
 
   function usdTransferFrom(
@@ -64,7 +64,21 @@ contract SMFundFactory is Ownable {
     address to,
     uint256 amount
   ) public {
-    require(msg.sender == managersToFunds[SMFund(msg.sender).manager()], 'F1'); // Only callable by funds
+    require(msg.sender == managerToFund[SMFund(msg.sender).manager()], 'F1'); // Only callable by funds
     usdToken.transferFrom(from, to, amount);
+  }
+
+  function whitelistMulti(address[] calldata managers, string[] calldata names)
+    public
+    onlyOwner
+  {
+    for (uint256 i = 0; i < managers.length; i++) {
+      require(!managerWhitelist[managers[i]].whitelisted, 'F2'); // Manager is already whitelisted
+      managerWhitelist[managers[i]] = Manager({
+        whitelisted: true,
+        name: names[i]
+      });
+      emit ManagerWhitelisted(managers[i], names[i]);
+    }
   }
 }

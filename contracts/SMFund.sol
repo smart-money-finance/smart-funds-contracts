@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.3;
 
 import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
-import '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
-import '@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol';
 import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
 
+import './FeeDividendToken.sol';
 import './SMFundFactory.sol';
+
+// import 'hardhat/console.sol';
 
 // TODO:
 // figure out how to allow selling of parts of investments
@@ -15,33 +16,28 @@ import './SMFundFactory.sol';
 // maybe link them together so client can know which ones are splits of others
 // also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
 
-contract SMFund is Initializable, ERC20Upgradeable {
+contract SMFund is Initializable, FeeDividendToken {
   SMFundFactory internal factory;
   ERC20 internal usdToken;
-  uint8 internal _decimals;
   address public manager;
   uint256 public timelock;
   uint256 public managementFee; // basis points per year
   uint256 public performanceFee; // basis points
+  uint256 public feeTimelock;
+  uint256 public redemptionWaitingPeriod;
   bool public signedAum;
   string public logoUrl;
   string public contactInfo;
+  string public tags;
   uint256 public maxInvestors;
   uint256 public maxInvestmentsPerInvestor;
   uint256 public minInvestmentAmount; // in usd token decimals
 
   uint256 public aum;
   uint256 public aumTimestamp; // block timestamp of last aum update
-  // uint256 public aumAverage; // average aum since the last fee sweep
-  // uint256 public aumAverageCount; // number of aum updates since the last fee sweep
-  uint256 public globalHighWaterPrice; // highest ((aum * 10^18) / supply)
-  uint256 public globalHighWaterPriceTimestamp; // timestamp of highest price
-  uint256 public highWaterPriceSinceLastFee; // highest price * 10^18 since last fee sweep
-  uint256 public highWaterPriceTimestampSinceLastFee; // timestamp of highest price since last fee sweep
-  uint256 public lastFeeTimestamp; // timestamp of the start of the last fee update
-  bool public processingRequestsAndFees; // whether the fund manager is in the middle of processing requests and/or fees
-  uint256 public processingRedemptionsEarlyCount; // how many redemption requests the fund manager wants to process early this time
-  uint256 public feesInEscrow; // keeps track of all usd held by fund contract that are from fees as opposed to investment requests
+  uint256 public highWaterPrice; // highest ((aum * 10^18) / supply)
+  uint256 public highWaterPriceTimestamp; // timestamp of highest price
+  uint256 public feeWithdrawnTimestamp;
 
   struct Investor {
     bool whitelisted;
@@ -53,24 +49,18 @@ contract SMFund is Initializable, ERC20Upgradeable {
     address investor;
     uint256 initialUsdAmount;
     uint256 initialFundAmount;
-    uint256 fundAmount;
+    uint256 initialBaseAmount;
+    uint256 initialHighWaterPrice;
     uint256 timestamp;
-    uint256 lastFeeTimestamp;
-    uint256 highWaterPrice; // highest fund price while this investment has been active * 10^18
-    uint256 highWaterPriceTimestamp;
-    uint256 usdManagementFeesCollected;
-    uint256 usdPerformanceFeesCollected;
     uint256 investmentRequestId;
     uint256 redemptionRequestId;
     bool redeemed;
   }
   Investment[] public investments;
 
-  EnumerableSetUpgradeable.UintSet internal activeInvestmentIds;
-  uint256 public nextFeeActiveInvestmentIndex;
-
   uint256 public investorCount;
-  mapping(address => uint256) public activeInvestmentCountPerInvestor;
+  mapping(address => uint256) public activeAndPendingInvestmentCountPerInvestor;
+  uint256 public activeAndPendingInvestmentCount;
 
   enum RequestStatus { Pending, Failed, Processed }
 
@@ -131,49 +121,54 @@ contract SMFund is Initializable, ERC20Upgradeable {
   event Redeemed(
     address indexed investor,
     uint256 fundAmount,
+    uint256 performanceFeeFundAmount, // will be 0 unless this investment was made after the last high water mark happened
     uint256 usdAmount,
     uint256 investmentId,
     uint256 redemptionRequestId
   );
   event FeesCollected(
-    address indexed investor,
-    uint256 fundAmountManagement,
-    uint256 fundAmountPerformance,
-    uint256 usdAmountManagement,
-    uint256 usdAmountPerformance,
-    uint256 investmentId
+    uint256 managementFeeFundAmount,
+    uint256 performanceFeeFundAmount
   );
-  event FeesWithdrawn(address indexed to, uint256 usdAmount);
-  event NewGlobalHighWaterPrice(uint256 indexed price);
-  event StartedProcessingRequestsAndFees();
-  event DoneProcessingRequestsAndFees();
+  event FeesWithdrawn(
+    address indexed to,
+    uint256 fundAmount,
+    uint256 usdAmount
+  );
+  event NewHighWaterPrice(uint256 indexed price);
 
   function initialize(
     address[2] memory addressParams, // manager, initialInvestor
-    uint256[8] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount
+    uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
     bool _signedAum,
     string memory name,
     string memory symbol,
     string memory _logoUrl,
     string memory _contactInfo,
     string memory initialInvestorName,
+    string memory _tags,
     bytes memory signature
   ) public initializer onlyBefore(uintParams[4]) {
-    __ERC20_init(name, symbol);
+    _FeeDividendToken_init(name, symbol, 6);
     require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
     factory = SMFundFactory(msg.sender);
     usdToken = factory.usdToken();
-    _decimals = usdToken.decimals();
     manager = addressParams[0];
     signedAum = _signedAum;
     timelock = uintParams[0];
     managementFee = uintParams[1];
     performanceFee = uintParams[2];
+    feeTimelock = uintParams[8];
+    redemptionWaitingPeriod = uintParams[9];
     maxInvestors = uintParams[5];
     maxInvestmentsPerInvestor = uintParams[6];
     minInvestmentAmount = uintParams[7];
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
+    tags = _tags;
+    aumTimestamp = block.timestamp;
+    highWaterPrice = 1e16; // initial price of $0.01
+    highWaterPriceTimestamp = block.timestamp;
     _addToWhitelist(addressParams[1], initialInvestorName);
     _addInvestmentRequest(
       addressParams[1],
@@ -184,13 +179,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     );
     _addInvestment(0);
     nextInvestmentRequestIndex = 1;
-    verifyAumSignature(manager, uintParams[4], signature);
-    globalHighWaterPrice = (aum * 1e18) / totalSupply();
-    highWaterPriceSinceLastFee = globalHighWaterPrice;
-    globalHighWaterPriceTimestamp = block.timestamp;
-    highWaterPriceTimestampSinceLastFee = block.timestamp;
-    lastFeeTimestamp = block.timestamp;
-    emit NewGlobalHighWaterPrice(globalHighWaterPrice);
+    _verifyAumSignature(manager, uintParams[4], signature);
+    emit NewHighWaterPrice(highWaterPrice);
   }
 
   modifier onlyManager() {
@@ -208,116 +198,61 @@ contract SMFund is Initializable, ERC20Upgradeable {
     _;
   }
 
-  function decimals() public view override returns (uint8) {
-    return _decimals;
-  }
-
   function updateAum(
     uint256 _aum,
     uint256 deadline,
-    bool processFees,
-    uint256 processCount,
-    uint256 earlyRedemptionCount,
+    uint256 earlyInvestmentsToProcess,
+    uint256 earlyRedemptionsToProcess,
     bytes calldata signature
   ) public onlyBefore(deadline) {
-    require(!processingRequestsAndFees, 'S32'); // Can't update AUM until finished processing requests and fees
-    require(
-      !processFees || block.timestamp > lastFeeTimestamp + 27 days,
-      'S33'
-    ); // Can't process fees until 27 days have passed
+    uint256 previousAumTimestamp = aumTimestamp;
+    uint256 previousHighWaterPrice = highWaterPrice;
     aum = _aum;
     aumTimestamp = block.timestamp;
-    // update the rolling average
-    // if (aumAverageCount > 0) {
-    //   aumAverage =
-    //     (aumAverage * aumAverageCount + _aum) /
-    //     (aumAverageCount + 1);
-    // } else {
-    //   aumAverage = _aum;
-    // }
-    // aumAverageCount++;
-    verifyAumSignature(msg.sender, deadline, signature);
+    _verifyAumSignature(msg.sender, deadline, signature);
     uint256 supply = totalSupply();
     emit NavUpdated(_aum, supply);
     uint256 price = (aum * 1e18) / supply;
-    if (price > globalHighWaterPrice) {
-      globalHighWaterPrice = price;
-      globalHighWaterPriceTimestamp = block.timestamp;
-      emit NewGlobalHighWaterPrice(globalHighWaterPrice);
+    if (price > highWaterPrice) {
+      highWaterPrice = price;
+      highWaterPriceTimestamp = block.timestamp;
+      emit NewHighWaterPrice(highWaterPrice);
     }
-    if (price > highWaterPriceSinceLastFee) {
-      highWaterPriceSinceLastFee = price;
-      highWaterPriceTimestampSinceLastFee = block.timestamp;
-    }
-    if (processFees || block.timestamp > lastFeeTimestamp + 32 days) {
-      lastFeeTimestamp = block.timestamp;
-      // aumAverageCount = 0;
-    }
-    processingRequestsAndFees = true;
-    processingRedemptionsEarlyCount = earlyRedemptionCount;
-    emit StartedProcessingRequestsAndFees();
-    _processRequestsAndFees(processCount);
+    _processFees(previousAumTimestamp, previousHighWaterPrice);
+    _processInvestments(earlyInvestmentsToProcess);
+    _processRedemptions(earlyRedemptionsToProcess);
   }
 
-  function processRequestsAndFees(uint256 processCount) public onlyManager {
-    require(processingRequestsAndFees, 'S34'); // Not currently processing requests and fees
-    _processRequestsAndFees(processCount);
-  }
-
-  function _processRequestsAndFees(uint256 processCount) internal {
-    // first process redemptions
-    if (nextRedemptionRequestIndex < redemptionRequests.length) {
-      RedemptionRequest storage redemptionRequest =
-        redemptionRequests[nextRedemptionRequestIndex];
-      while (
-        nextRedemptionRequestIndex < redemptionRequests.length &&
-        (redemptionRequest.timestamp + 6 days < aumTimestamp ||
-          (processingRedemptionsEarlyCount > 0 &&
-            redemptionRequest.timestamp < aumTimestamp))
-      ) {
-        if (processCount == 0) return;
-        _redeem(nextRedemptionRequestIndex);
-        redemptionRequest = redemptionRequests[nextRedemptionRequestIndex++];
-        processCount--;
-        if (processingRedemptionsEarlyCount > 0) {
-          processingRedemptionsEarlyCount--;
-        }
+  function _processInvestments(uint256 investmentsToProcess) internal {
+    investmentsToProcess += 5;
+    for (uint256 i = 0; i < investmentsToProcess; i++) {
+      if (nextInvestmentRequestIndex == investmentRequests.length) {
+        return;
       }
-    }
-    // then process fees
-    if (lastFeeTimestamp == aumTimestamp) {
-      while (
-        nextFeeActiveInvestmentIndex <
-        EnumerableSetUpgradeable.length(activeInvestmentIds)
-      ) {
-        if (processCount == 0) return;
-        uint256 investmentId =
-          EnumerableSetUpgradeable.at(
-            activeInvestmentIds,
-            nextFeeActiveInvestmentIndex
-          );
-        Investment storage investment = investments[investmentId];
-        if (investment.timestamp + 30 days < lastFeeTimestamp) {
-          _processFees(investmentId);
-        }
-        nextFeeActiveInvestmentIndex++;
-        processCount--;
-      }
-    }
-    // and finally process investments
-    while (nextInvestmentRequestIndex < investmentRequests.length) {
-      if (processCount == 0) return;
       _addInvestment(nextInvestmentRequestIndex);
       nextInvestmentRequestIndex++;
-      processCount--;
     }
-    if (lastFeeTimestamp == aumTimestamp) {
-      highWaterPriceSinceLastFee = 0;
-      highWaterPriceTimestampSinceLastFee = 0;
+  }
+
+  function _processRedemptions(uint256 earlyRedemptionsToProcess) internal {
+    uint256 maxRedemptionsToProcess = earlyRedemptionsToProcess + 5;
+    for (uint256 i = 0; i < maxRedemptionsToProcess; i++) {
+      if (nextRedemptionRequestIndex == redemptionRequests.length) {
+        return;
+      }
+      RedemptionRequest storage redemptionRequest =
+        redemptionRequests[nextRedemptionRequestIndex];
+      if (
+        redemptionRequest.timestamp + redemptionWaitingPeriod < block.timestamp
+      ) {
+        if (earlyRedemptionsToProcess == 0) {
+          return;
+        }
+        earlyRedemptionsToProcess--;
+      }
+      _redeem(nextRedemptionRequestIndex);
+      nextRedemptionRequestIndex++;
     }
-    nextFeeActiveInvestmentIndex = 0;
-    processingRequestsAndFees = false;
-    emit DoneProcessingRequestsAndFees();
   }
 
   function whitelistMulti(address[] calldata investors, string[] calldata names)
@@ -340,7 +275,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
 
   function blacklistMulti(address[] calldata investors) public onlyManager {
     for (uint256 i = 0; i < investors.length; i++) {
-      require(activeInvestmentCountPerInvestor[investors[i]] == 0, 'S7'); // Investor has open investments
+      require(
+        activeAndPendingInvestmentCountPerInvestor[investors[i]] == 0,
+        'S7'
+      ); // Investor has open investments
       require(whitelist[investors[i]].whitelisted, 'S8'); // Investor isn't whitelisted
       investorCount--;
       delete whitelist[investors[i]];
@@ -355,6 +293,19 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 investmentDeadline,
     uint256 deadline
   ) public onlyWhitelisted onlyBefore(deadline) {
+    require(
+      activeAndPendingInvestmentCountPerInvestor[msg.sender] <
+        maxInvestmentsPerInvestor,
+      'S11' // Investor has reached max investment limit
+    );
+    require(usdAmount >= minInvestmentAmount, 'S9'); // Less than minimum investment amount
+    require(minFundAmount > 0, 'S10'); // Minimum fund amount returned must be greater than 0
+    require(investmentDeadline >= block.timestamp + 24 hours, 'S35'); // Investment deadline too short
+    require(
+      redemptionRequests.length == 0 ||
+        redemptionRequests[redemptionRequests.length - 1].investmentId != 0,
+      'S47'
+    ); // Fund is in the process of closing
     _addInvestmentRequest(
       msg.sender,
       usdAmount,
@@ -371,13 +322,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
     uint256 maxFundAmount,
     uint256 investmentDeadline
   ) internal {
-    require(
-      activeInvestmentCountPerInvestor[investor] < maxInvestmentsPerInvestor,
-      'S11' // Investor has reached max investment limit
-    );
-    require(usdAmount >= minInvestmentAmount, 'S9'); // Less than minimum investment amount
-    require(minFundAmount > 0, 'S10'); // Minimum fund amount returned must be greater than 0
-    require(investmentDeadline >= block.timestamp + 24 hours, 'S35'); // Investment deadline too short
     investmentRequests.push(
       InvestmentRequest({
         investor: investor,
@@ -394,6 +338,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     if (investmentRequests.length > 1) {
       factory.usdTransferFrom(investor, address(this), usdAmount);
     }
+    activeAndPendingInvestmentCount++;
+    activeAndPendingInvestmentCountPerInvestor[investor]++;
     emit InvestmentRequested(
       investor,
       usdAmount,
@@ -415,6 +361,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     investmentRequest.status = RequestStatus.Failed;
     // send the escrow funds back
     usdToken.transfer(investmentRequest.investor, investmentRequest.usdAmount);
+    activeAndPendingInvestmentCount--;
+    activeAndPendingInvestmentCountPerInvestor[investmentRequest.investor]--;
     emit InvestmentRequestFailed(
       investmentRequest.investor,
       investmentRequestId
@@ -432,10 +380,11 @@ contract SMFund is Initializable, ERC20Upgradeable {
     require(investment.timestamp + timelock <= block.timestamp, 'S15'); // Investment is still locked up
     require(minUsdAmount > 0, 'S39'); // Min amount must be greater than 0
     require(
-      EnumerableSetUpgradeable.length(activeInvestmentIds) == 1 ||
-        investmentId != 0,
-      'S40'
-    ); // Initial investment can only be redeemed after all other investments
+      redemptionRequests.length == 0 ||
+        redemptionRequests[redemptionRequests.length - 1].investmentId != 0,
+      'S46'
+    ); // Fund is in the process of closing
+    require(investmentId != 0 || activeAndPendingInvestmentCount == 1, 'S40'); // Initial investment can only be redeemed after all other investments
     uint256 redemptionRequestId = redemptionRequests.length;
     if (redemptionRequestId > 0) {
       RedemptionRequest storage redemptionRequest =
@@ -467,12 +416,10 @@ contract SMFund is Initializable, ERC20Upgradeable {
   function _addInvestment(uint256 investmentRequestId) internal {
     InvestmentRequest storage investmentRequest =
       investmentRequests[investmentRequestId];
-
     // if the investor already withdrew his investment after the deadline
     if (investmentRequest.status == RequestStatus.Failed) {
       return;
     }
-
     // only process if within the deadline, otherwise fallback to failure below
     if (investmentRequest.deadline >= block.timestamp) {
       uint256 investmentId = investments.length;
@@ -496,26 +443,19 @@ contract SMFund is Initializable, ERC20Upgradeable {
         }
         aum += investmentRequest.usdAmount;
         _mint(investmentRequest.investor, fundAmount);
-
         investments.push(
           Investment({
             investor: investmentRequest.investor,
             initialUsdAmount: investmentRequest.usdAmount,
             initialFundAmount: fundAmount,
-            fundAmount: fundAmount,
+            initialBaseAmount: toBase(fundAmount),
+            initialHighWaterPrice: highWaterPrice,
             timestamp: block.timestamp,
-            lastFeeTimestamp: block.timestamp,
-            highWaterPrice: (aum * 1e18) / totalSupply(),
-            highWaterPriceTimestamp: block.timestamp,
-            usdManagementFeesCollected: 0,
-            usdPerformanceFeesCollected: 0,
             investmentRequestId: investmentRequestId,
             redemptionRequestId: 0,
             redeemed: false
           })
         );
-        EnumerableSetUpgradeable.add(activeInvestmentIds, investmentId);
-        activeInvestmentCountPerInvestor[investmentRequest.investor]++;
         emit Invested(
           investmentRequest.investor,
           investmentRequest.usdAmount,
@@ -531,6 +471,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
     investmentRequest.status = RequestStatus.Failed;
     // send the escrow funds back
     usdToken.transfer(investmentRequest.investor, investmentRequest.usdAmount);
+    activeAndPendingInvestmentCount--;
+    activeAndPendingInvestmentCountPerInvestor[investmentRequest.investor]--;
     emit InvestmentRequestFailed(
       investmentRequest.investor,
       investmentRequestId
@@ -542,36 +484,24 @@ contract SMFund is Initializable, ERC20Upgradeable {
       redemptionRequests[redemptionRequestId];
     Investment storage investment = investments[redemptionRequest.investmentId];
     if (!investment.redeemed) {
-      // calculate fees in usd and fund token
-      (uint256 usdManagementFee, uint256 fundManagementFee) =
-        calculateManagementFee(redemptionRequest.investmentId);
-      (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
-        calculatePerformanceFee(redemptionRequest.investmentId);
-
-      // calculate usd value of the current fundAmount remaining in the investment
+      uint256 performanceFeeFundAmount =
+        _calculatePerformanceFee(redemptionRequest.investmentId);
+      uint256 fundAmount = fromBase(investment.initialBaseAmount);
       uint256 usdAmount =
-        ((investment.fundAmount - (fundManagementFee + fundPerformanceFee)) *
-          aum) / totalSupply();
+        ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
       if (usdAmount >= redemptionRequest.minUsdAmount) {
         // success
-        // extract fees
-        _extractFees(
-          redemptionRequest.investmentId,
-          usdManagementFee,
-          fundManagementFee,
-          usdPerformanceFee,
-          fundPerformanceFee
-        );
         // mark investment as redeemed and lower total investment count
         investment.redeemed = true;
-        EnumerableSetUpgradeable.remove(
-          activeInvestmentIds,
-          redemptionRequest.investmentId
-        );
-        activeInvestmentCountPerInvestor[investment.investor]--;
+        activeAndPendingInvestmentCount--;
+        activeAndPendingInvestmentCountPerInvestor[investment.investor]--;
         redemptionRequest.status = RequestStatus.Processed;
         // burn fund tokens
-        _burn(investment.investor, investment.fundAmount);
+        _burn(investment.investor, fundAmount);
+        if (performanceFeeFundAmount > 0) {
+          // mint performance fee tokens
+          _mint(address(this), performanceFeeFundAmount);
+        }
         // subtract usd amount from aum
         aum -= usdAmount;
         if (redemptionRequest.investmentId != 0) {
@@ -585,7 +515,8 @@ contract SMFund is Initializable, ERC20Upgradeable {
         }
         emit Redeemed(
           investment.investor,
-          investment.fundAmount,
+          fundAmount,
+          performanceFeeFundAmount,
           usdAmount,
           redemptionRequest.investmentId,
           redemptionRequestId
@@ -602,76 +533,110 @@ contract SMFund is Initializable, ERC20Upgradeable {
     );
   }
 
-  function _processFees(uint256 investmentId) internal {
-    // calculate fees in usd and fund token
-    (uint256 usdManagementFee, uint256 fundManagementFee) =
-      calculateManagementFee(investmentId);
-    (uint256 usdPerformanceFee, uint256 fundPerformanceFee) =
-      calculatePerformanceFee(investmentId);
+  function _processFees(
+    uint256 previousAumTimestamp,
+    uint256 previousHighWaterPrice
+  ) internal {
+    uint256 supply = totalSupply();
+    uint256 nonFeeSupply = supply - balanceOf(address(this));
+    uint256 managementFeeFundAmount =
+      _calculateManagementFee(nonFeeSupply, previousAumTimestamp);
 
-    _extractFees(
-      investmentId,
-      usdManagementFee,
-      fundManagementFee,
-      usdPerformanceFee,
-      fundPerformanceFee
+    uint256 performanceFeeFundAmount = 0;
+    // if a new high water mark is reached, calculate performance fee
+    if (previousHighWaterPrice != highWaterPrice) {
+      performanceFeeFundAmount =
+        ((highWaterPrice - previousHighWaterPrice) *
+          nonFeeSupply *
+          performanceFee) /
+        highWaterPrice /
+        10000;
+    }
+    _collectFees(
+      address(this),
+      managementFeeFundAmount + performanceFeeFundAmount
     );
+    emit FeesCollected(managementFeeFundAmount, performanceFeeFundAmount);
   }
 
-  function _extractFees(
-    uint256 investmentId,
-    uint256 usdManagementFee,
-    uint256 fundManagementFee,
-    uint256 usdPerformanceFee,
-    uint256 fundPerformanceFee
-  ) internal {
+  function _calculateManagementFee(
+    uint256 fundAmount,
+    uint256 previousFeeTimestamp
+  ) internal view returns (uint256) {
+    return
+      ((block.timestamp - previousFeeTimestamp) * managementFee * fundAmount) /
+      365.25 days /
+      10000; // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000
+  }
+
+  function _calculatePerformanceFee(uint256 investmentId)
+    internal
+    view
+    returns (uint256 performanceFeeFundAmount)
+  {
     Investment storage investment = investments[investmentId];
-
-    // update totals stored in the investment struct
-    investment.usdManagementFeesCollected += usdManagementFee;
-    investment.usdPerformanceFeesCollected += usdPerformanceFee;
-    investment.fundAmount -= (fundManagementFee + fundPerformanceFee);
-    investment.lastFeeTimestamp = block.timestamp;
+    uint256 initialPrice =
+      (investment.initialUsdAmount * 1e18) / investment.initialFundAmount;
+    uint256 priceNow = (aum * 1e18) / totalSupply();
+    // if the last high water mark happened after the investment was made
     if (
-      investment.timestamp < lastFeeTimestamp &&
-      highWaterPriceSinceLastFee > investment.highWaterPrice
+      highWaterPriceTimestamp > investment.timestamp &&
+      investment.initialHighWaterPrice > initialPrice
     ) {
-      investment.highWaterPrice = highWaterPriceSinceLastFee;
+      // calculate the performance fee between the price at investment and the high water mark at time of investment
+      performanceFeeFundAmount =
+        ((investment.initialHighWaterPrice - initialPrice) *
+          fromBase(investment.initialBaseAmount) *
+          performanceFee) /
+        investment.initialHighWaterPrice /
+        10000;
+    } else if (priceNow > initialPrice) {
+      // calculate the performance fee between the price at investment and current price
+      performanceFeeFundAmount =
+        ((priceNow - initialPrice) *
+          fromBase(investment.initialBaseAmount) *
+          performanceFee) /
+        priceNow /
+        10000;
     }
+  }
 
-    // 2 burns and 2 transfers are done so events show up separately on etherscan and elsewhere which makes matching them up with what the UI shows a lot easier
-    // burn the two fee amounts from the investor
-    _burn(investment.investor, fundManagementFee);
-    _burn(investment.investor, fundPerformanceFee);
-    uint256 totalUsdFee = usdManagementFee + usdPerformanceFee;
+  function remainingFundAmount(uint256 investmentId)
+    public
+    view
+    returns (uint256)
+  {
+    Investment storage investment = investments[investmentId];
+    return fromBase(investment.initialBaseAmount);
+  }
+
+  function unpaidFees(uint256 investmentId)
+    public
+    view
+    returns (uint256 managementFeeFundAmount, uint256 performanceFeeFundAmount)
+  {
+    managementFeeFundAmount = _calculateManagementFee(
+      remainingFundAmount(investmentId),
+      aumTimestamp
+    );
+    performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
+  }
+
+  function withdrawFees(address to, uint256 fundAmount) public onlyManager {
+    require(block.timestamp >= feeWithdrawnTimestamp + feeTimelock, 'S44'); // Can't withdraw fees yet
+    require(to != manager, 'S45'); // Can't withdraw fees to fund manager wallet
+    feeWithdrawnTimestamp = block.timestamp;
+    uint256 usdAmount = (fundAmount * aum) / totalSupply();
+    _burn(address(this), fundAmount);
+    aum -= usdAmount;
     require(
-      usdToken.balanceOf(manager) >= totalUsdFee &&
-        usdToken.allowance(manager, address(factory)) >= totalUsdFee,
+      usdToken.balanceOf(manager) >= usdAmount &&
+        usdToken.allowance(manager, address(factory)) >= usdAmount,
       'S43'
     ); // Not enough usd tokens available and approved
-    // decrement fund aum by the usd amounts
-    aum -= totalUsdFee;
-    // increment fees in escrow count by the usd amounts
-    feesInEscrow += totalUsdFee;
-    // transfer usd for the two fee amounts
-    factory.usdTransferFrom(manager, address(this), usdManagementFee);
-    factory.usdTransferFrom(manager, address(this), usdPerformanceFee);
-    emit FeesCollected(
-      investment.investor,
-      fundManagementFee,
-      fundPerformanceFee,
-      usdManagementFee,
-      usdPerformanceFee,
-      investmentId
-    );
+    factory.usdTransferFrom(manager, to, usdAmount);
+    emit FeesWithdrawn(to, fundAmount, usdAmount);
     emit NavUpdated(aum, totalSupply());
-  }
-
-  function withdrawFees(uint256 usdAmount, address to) public onlyManager {
-    // safemath on underflow will prevent withdrawing more than is owed
-    feesInEscrow -= usdAmount;
-    usdToken.transfer(to, usdAmount);
-    emit FeesWithdrawn(to, usdAmount);
   }
 
   function editLogo(string calldata _logoUrl) public onlyManager {
@@ -692,7 +657,19 @@ contract SMFund is Initializable, ERC20Upgradeable {
     minInvestmentAmount = _minInvestmentAmount;
   }
 
-  function verifyAumSignature(
+  function editFees(uint256 _managementFee, uint256 _performanceFee)
+    public
+    onlyManager
+  {
+    require(
+      _managementFee <= managementFee && _performanceFee <= performanceFee,
+      'S48'
+    ); // Can't increase fees
+    managementFee = _managementFee;
+    performanceFee = _performanceFee;
+  }
+
+  function _verifyAumSignature(
     address sender,
     uint256 deadline,
     bytes memory signature
@@ -710,70 +687,6 @@ contract SMFund is Initializable, ERC20Upgradeable {
     } else {
       require(sender == factory.owner(), 'S30'); // AUM signer only
     }
-  }
-
-  function calculateManagementFee(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdManagementFee, uint256 fundManagementFee)
-  {
-    Investment storage investment = investments[investmentId];
-    // calculate management fee % of current fund tokens scaled over the time since last fee withdrawal
-    fundManagementFee =
-      ((block.timestamp - investment.lastFeeTimestamp) *
-        managementFee *
-        investment.fundAmount) /
-      365.25 days /
-      10000; // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000
-
-    // calculate the usd value of the management fee being pulled
-    usdManagementFee = (fundManagementFee * aum) / totalSupply();
-  }
-
-  function calculatePerformanceFee(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdPerformanceFee, uint256 fundPerformanceFee)
-  {
-    Investment storage investment = investments[investmentId];
-    // usd value of the investment at the high water mark
-    uint256 usdValue = highWaterMark(investmentId);
-    uint256 totalUsdPerformanceFee = 0;
-    if (usdValue > investment.initialUsdAmount) {
-      // calculate current performance fee from initial usd value of investment to current usd value
-      totalUsdPerformanceFee =
-        ((usdValue - investment.initialUsdAmount) * performanceFee) /
-        10000;
-    }
-    // if we're over the high water mark, meaning more performance fees are owed than have previously been collected
-    if (totalUsdPerformanceFee > investment.usdPerformanceFeesCollected) {
-      usdPerformanceFee =
-        totalUsdPerformanceFee -
-        investment.usdPerformanceFeesCollected;
-      fundPerformanceFee = (totalSupply() * usdPerformanceFee) / aum;
-    }
-  }
-
-  function highWaterMark(uint256 investmentId)
-    public
-    view
-    returns (uint256 usdValue)
-  {
-    Investment storage investment = investments[investmentId];
-    uint256 price;
-    if (
-      investment.timestamp < lastFeeTimestamp &&
-      highWaterPriceSinceLastFee > investment.highWaterPrice
-    ) {
-      price = highWaterPriceSinceLastFee;
-    } else {
-      price = investment.highWaterPrice;
-    }
-    usdValue = (price * investment.fundAmount) / 1e18;
-  }
-
-  function activeInvestmentCount() public view returns (uint256) {
-    return EnumerableSetUpgradeable.length(activeInvestmentIds);
   }
 
   function _beforeTokenTransfer(

@@ -4,6 +4,7 @@
   "L2": "AUM signer only",
   "F0": "This address already manages a fund",
   "F1": "Only callable by funds",
+  "F2": "Manager is already whitelisted",
   "S0": "Initial AUM must be greater than 0",
   "S1": "Fund manager only",
   "S2": "Investments are disabled",
@@ -47,5 +48,10 @@
   "S40": "Initial investment can only be redeemed after all other investments",
   "S41": "Investment already has an open redemption request",
   "S42": "Not enough usd tokens available and approved",
-  "S43": "Not enough usd tokens available and approved"
+  "S43": "Not enough usd tokens available and approved",
+  "S44": "Can't withdraw fees yet",
+  "S45": "Can't withdraw fees to fund manager wallet",
+  "S46": "Fund is in the process of closing",
+  "S47": "Fund is in the process of closing",
+  "S48": "Can't increase fees"
 }
