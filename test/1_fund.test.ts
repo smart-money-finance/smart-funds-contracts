@@ -20,11 +20,15 @@ describe('Fund', () => {
     usdToken = await UsdToken.deploy();
     await usdToken.deployed();
 
-    const SMFund = await ethers.getContractFactory('SMFund');
-    const masterFundLibrary = await SMFund.deploy();
+    const SmartFund = await ethers.getContractFactory('SmartFund');
+    const masterFundLibrary = await SmartFund.deploy();
 
-    const Factory = await ethers.getContractFactory('SMFundFactory');
-    factory = await Factory.deploy(masterFundLibrary.address, usdToken.address);
+    const Factory = await ethers.getContractFactory('SmartFundFactory');
+    factory = await Factory.deploy(
+      masterFundLibrary.address,
+      usdToken.address,
+      true,
+    );
     await factory.deployed();
 
     wallets = await ethers.getSigners();
@@ -76,7 +80,7 @@ describe('Fund', () => {
     const fundAddress = txResp.events.find(
       (event: Event) => event.event === 'FundCreated',
     ).args.fund;
-    fund = await ethers.getContractAt('SMFund', fundAddress);
+    fund = await ethers.getContractAt('SmartFund', fundAddress);
     const request = await fund.investmentRequests(0);
     const investment = await fund.investments(0);
     const initalPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18

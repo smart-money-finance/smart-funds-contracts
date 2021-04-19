@@ -6,12 +6,12 @@ import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import '@openzeppelin/contracts/proxy/Clones.sol';
 
-import './SMFund.sol';
+import './SmartFund.sol';
 
-contract SMFundFactory is Ownable {
+contract SmartFundFactory is Ownable {
   address internal masterFundLibrary;
   ERC20 public usdToken;
-  SMFund[] public funds;
+  SmartFund[] public funds;
 
   struct Manager {
     bool whitelisted;
@@ -19,13 +19,19 @@ contract SMFundFactory is Ownable {
   }
   mapping(address => Manager) public managerWhitelist;
   mapping(address => address) public managerToFund;
+  bool public bypassWhitelist;
 
   event ManagerWhitelisted(address indexed manager, string name);
   event FundCreated(address indexed fund);
 
-  constructor(address _masterFundLibrary, ERC20 _usdToken) {
+  constructor(
+    address _masterFundLibrary,
+    ERC20 _usdToken,
+    bool _bypassWhitelist
+  ) {
     masterFundLibrary = _masterFundLibrary;
     usdToken = _usdToken;
+    bypassWhitelist = _bypassWhitelist;
   }
 
   function newFund(
@@ -41,7 +47,8 @@ contract SMFundFactory is Ownable {
     bytes memory signature
   ) public {
     require(managerToFund[msg.sender] == address(0), 'F0'); // This address already manages a fund
-    SMFund fund = SMFund(Clones.clone(masterFundLibrary));
+    require(bypassWhitelist || managerWhitelist[msg.sender].whitelisted, 'F3'); // Not whitelisted as a fund manager
+    SmartFund fund = SmartFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       [msg.sender, initialInvestor],
       uintParams,
@@ -64,7 +71,7 @@ contract SMFundFactory is Ownable {
     address to,
     uint256 amount
   ) public {
-    require(msg.sender == managerToFund[SMFund(msg.sender).manager()], 'F1'); // Only callable by funds
+    require(msg.sender == managerToFund[SmartFund(msg.sender).manager()], 'F1'); // Only callable by funds
     usdToken.transferFrom(from, to, amount);
   }
 

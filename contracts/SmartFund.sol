@@ -6,7 +6,7 @@ import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
 
 import './FeeDividendToken.sol';
-import './SMFundFactory.sol';
+import './SmartFundFactory.sol';
 
 // import 'hardhat/console.sol';
 
@@ -16,8 +16,8 @@ import './SMFundFactory.sol';
 // maybe link them together so client can know which ones are splits of others
 // also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
 
-contract SMFund is Initializable, FeeDividendToken {
-  SMFundFactory internal factory;
+contract SmartFund is Initializable, FeeDividendToken {
+  SmartFundFactory internal factory;
   ERC20 internal usdToken;
   address public manager;
   uint256 public timelock;
@@ -128,7 +128,8 @@ contract SMFund is Initializable, FeeDividendToken {
   );
   event FeesCollected(
     uint256 managementFeeFundAmount,
-    uint256 performanceFeeFundAmount
+    uint256 performanceFeeFundAmount,
+    uint256 nonFeeSupply
   );
   event FeesWithdrawn(
     address indexed to,
@@ -151,7 +152,7 @@ contract SMFund is Initializable, FeeDividendToken {
   ) public initializer onlyBefore(uintParams[4]) {
     _FeeDividendToken_init(name, symbol, 6);
     require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
-    factory = SMFundFactory(msg.sender);
+    factory = SmartFundFactory(msg.sender);
     usdToken = factory.usdToken();
     manager = addressParams[0];
     signedAum = _signedAum;
@@ -572,7 +573,11 @@ contract SMFund is Initializable, FeeDividendToken {
       address(this),
       managementFeeFundAmount + performanceFeeFundAmount
     );
-    emit FeesCollected(managementFeeFundAmount, performanceFeeFundAmount);
+    emit FeesCollected(
+      managementFeeFundAmount,
+      performanceFeeFundAmount,
+      nonFeeSupply
+    );
   }
 
   function _calculateManagementFee(
