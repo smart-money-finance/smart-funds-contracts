@@ -88,4 +88,8 @@ contract SmartFundFactory is Ownable {
       emit ManagerWhitelisted(managers[i], names[i]);
     }
   }
+
+  function allFunds() public view returns (SmartFund[] memory) {
+    return funds;
+  }
 }
