@@ -4,6 +4,8 @@
   "L2": "AUM signer only",
   "F0": "This address already manages a fund",
   "F1": "Only callable by funds",
+  "F2": "Manager is already whitelisted",
+  "F3": "Not whitelisted as a fund manager",
   "S0": "Initial AUM must be greater than 0",
   "S1": "Fund manager only",
   "S2": "Investments are disabled",
@@ -32,7 +34,7 @@
   "S25": "Not enough time has passed since fees were last processed",
   "S26": "Token is not transferable",
   "S27": "Initial investor address cannot be manager address",
-  "S28": "Fund manager only",
+  "S28": "Manager or AUM updater only",
   "S29": "AUM signer mismatch",
   "S30": "AUM signer only",
   "S31": "Manager can't be investor",
@@ -47,5 +49,11 @@
   "S40": "Initial investment can only be redeemed after all other investments",
   "S41": "Investment already has an open redemption request",
   "S42": "Not enough usd tokens available and approved",
-  "S43": "Not enough usd tokens available and approved"
+  "S43": "Not enough usd tokens available and approved",
+  "S44": "Can't withdraw fees yet",
+  "S45": "Can't withdraw fees to fund manager wallet",
+  "S46": "Fund is in the process of closing",
+  "S47": "Fund is in the process of closing",
+  "S48": "Can't increase fees",
+  "S49": "Manager or fee beneficiary only"
 }
