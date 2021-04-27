@@ -20,6 +20,8 @@ contract SmartFund is Initializable, FeeDividendToken {
   SmartFundFactory internal factory;
   ERC20 internal usdToken;
   address public manager;
+  address public aumUpdater;
+  address public feeBeneficiary;
   uint256 public timelock;
   uint256 public managementFee; // basis points per year
   uint256 public performanceFee; // basis points
@@ -139,7 +141,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   event NewHighWaterPrice(uint256 indexed price);
 
   function initialize(
-    address[2] memory addressParams, // manager, initialInvestor
+    address[3] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary
     uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
     bool _signedAum,
     string memory name,
@@ -148,13 +150,16 @@ contract SmartFund is Initializable, FeeDividendToken {
     string memory _contactInfo,
     string memory initialInvestorName,
     string memory _tags,
-    bytes memory signature
+    bytes memory signature,
+    address _manager
   ) public initializer onlyBefore(uintParams[4]) {
     _FeeDividendToken_init(name, symbol, 6);
     require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
     factory = SmartFundFactory(msg.sender);
     usdToken = factory.usdToken();
-    manager = addressParams[0];
+    manager = _manager;
+    aumUpdater = addressParams[1];
+    feeBeneficiary = addressParams[2];
     signedAum = _signedAum;
     timelock = uintParams[0];
     managementFee = uintParams[1];
@@ -170,9 +175,9 @@ contract SmartFund is Initializable, FeeDividendToken {
     aumTimestamp = block.timestamp;
     highWaterPrice = 1e16; // initial price of $0.01
     highWaterPriceTimestamp = block.timestamp;
-    _addToWhitelist(addressParams[1], initialInvestorName);
+    _addToWhitelist(addressParams[0], initialInvestorName);
     _addInvestmentRequest(
-      addressParams[1],
+      addressParams[0],
       uintParams[3],
       1,
       type(uint256).max,
@@ -643,7 +648,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
   }
 
-  function withdrawFees(address to, uint256 fundAmount) public onlyManager {
+  function withdrawFees(address to, uint256 fundAmount) public {
+    require(msg.sender == manager || msg.sender == feeBeneficiary, 'S49'); // Manager or fee beneficiary only
     require(block.timestamp >= feeWithdrawnTimestamp + feeTimelock, 'S44'); // Can't withdraw fees yet
     require(to != manager, 'S45'); // Can't withdraw fees to fund manager wallet
     feeWithdrawnTimestamp = block.timestamp;
@@ -678,16 +684,22 @@ contract SmartFund is Initializable, FeeDividendToken {
     minInvestmentAmount = _minInvestmentAmount;
   }
 
-  function editFees(uint256 _managementFee, uint256 _performanceFee)
-    public
-    onlyManager
-  {
+  function editFees(
+    uint256 _managementFee,
+    uint256 _performanceFee,
+    address _feeBeneficiary
+  ) public onlyManager {
     require(
       _managementFee <= managementFee && _performanceFee <= performanceFee,
       'S48'
     ); // Can't increase fees
     managementFee = _managementFee;
     performanceFee = _performanceFee;
+    feeBeneficiary = _feeBeneficiary;
+  }
+
+  function editAumUpdater(address _aumUpdater) public onlyManager {
+    aumUpdater = _aumUpdater;
   }
 
   function _verifyAumSignature(
@@ -696,9 +708,9 @@ contract SmartFund is Initializable, FeeDividendToken {
     bytes memory signature
   ) internal view {
     if (!signedAum) {
-      require(sender == manager, 'S28'); // Fund manager only
-    } else if (sender == manager) {
-      bytes32 message = keccak256(abi.encode(manager, aum, deadline));
+      require(sender == manager || sender == aumUpdater, 'S28'); // Manager or AUM updater only
+    } else if (sender == manager || sender == aumUpdater) {
+      bytes32 message = keccak256(abi.encode(sender, aum, deadline));
       address signer =
         ECDSAUpgradeable.recover(
           ECDSAUpgradeable.toEthSignedMessageHash(message),

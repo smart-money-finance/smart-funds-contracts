@@ -54,7 +54,7 @@ describe('Fund', () => {
   step('Should create fund', async () => {
     const initialAum = await usdToken.balanceOf(owner.address);
     const tx = await factory.newFund(
-      wallets[1].address,
+      [wallets[1].address, owner.address, owner.address],
       [
         1,
         200,
@@ -107,6 +107,7 @@ describe('Fund', () => {
       await fund.activeAndPendingInvestmentCountPerInvestor(wallets[1].address),
     ).to.eq(1);
     expect(await fund.investorCount()).to.eq(1);
+    await debug();
   });
 
   step('Should whitelist clients', async () => {
@@ -140,6 +141,7 @@ describe('Fund', () => {
     expect(await fund.aum()).to.eq(newAum);
     expect(await fund.aumTimestamp()).to.eq(timestamp);
     expect(await fund.highWaterPrice()).to.eq(price);
+    await debug();
   });
 
   step('Should request to invest client funds', async () => {
@@ -215,6 +217,7 @@ describe('Fund', () => {
           wallets[2].address,
         ),
       ).to.eq(1);
+      await debug();
     },
   );
 

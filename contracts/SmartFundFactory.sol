@@ -35,7 +35,7 @@ contract SmartFundFactory is Ownable {
   }
 
   function newFund(
-    address initialInvestor,
+    address[3] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary
     uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
     bool signedAum,
     string memory name,
@@ -50,7 +50,7 @@ contract SmartFundFactory is Ownable {
     require(bypassWhitelist || managerWhitelist[msg.sender].whitelisted, 'F3'); // Not whitelisted as a fund manager
     SmartFund fund = SmartFund(Clones.clone(masterFundLibrary));
     fund.initialize(
-      [msg.sender, initialInvestor],
+      addressParams,
       uintParams,
       signedAum,
       name,
@@ -59,7 +59,8 @@ contract SmartFundFactory is Ownable {
       contactInfo,
       initialInvestorName,
       tags,
-      signature
+      signature,
+      msg.sender
     );
     funds.push(fund);
     managerToFund[msg.sender] = address(fund);
