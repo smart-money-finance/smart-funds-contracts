@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.4;
 
 // import 'hardhat/console.sol';
 
@@ -61,26 +61,26 @@ contract FeeDividendToken {
     return true;
   }
 
-  function increaseAllowance(address spender, uint256 addedAmount)
-    public
-    returns (bool)
-  {
-    _approve(msg.sender, spender, allowance[msg.sender][spender] + addedAmount);
-    return true;
-  }
+  // function increaseAllowance(address spender, uint256 addedAmount)
+  //   public
+  //   returns (bool)
+  // {
+  //   _approve(msg.sender, spender, allowance[msg.sender][spender] + addedAmount);
+  //   return true;
+  // }
 
-  function decreaseAllowance(address spender, uint256 subtractedAmount)
-    public
-    returns (bool)
-  {
-    uint256 currentAllowance = allowance[msg.sender][spender];
-    require(
-      currentAllowance >= subtractedAmount,
-      'ERC20: decreased allowance below zero'
-    );
-    _approve(msg.sender, spender, currentAllowance - subtractedAmount);
-    return true;
-  }
+  // function decreaseAllowance(address spender, uint256 subtractedAmount)
+  //   public
+  //   returns (bool)
+  // {
+  //   uint256 currentAllowance = allowance[msg.sender][spender];
+  //   require(
+  //     currentAllowance >= subtractedAmount,
+  //     'ERC20: decreased allowance below zero'
+  //   );
+  //   _approve(msg.sender, spender, currentAllowance - subtractedAmount);
+  //   return true;
+  // }
 
   function transferFrom(
     address sender,

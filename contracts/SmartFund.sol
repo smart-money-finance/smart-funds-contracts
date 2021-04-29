@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.4;
 
 import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
@@ -155,6 +155,10 @@ contract SmartFund is Initializable, FeeDividendToken {
   ) public initializer onlyBefore(uintParams[4]) {
     _FeeDividendToken_init(name, symbol, 6);
     require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
+    require(
+      addressParams[2] != address(0) && addressParams[2] != _manager,
+      'S50'
+    ); // Invalid fee beneficiary
     factory = SmartFundFactory(msg.sender);
     usdToken = factory.usdToken();
     manager = _manager;
@@ -648,10 +652,9 @@ contract SmartFund is Initializable, FeeDividendToken {
     performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
   }
 
-  function withdrawFees(address to, uint256 fundAmount) public {
+  function withdrawFees(uint256 fundAmount) public {
     require(msg.sender == manager || msg.sender == feeBeneficiary, 'S49'); // Manager or fee beneficiary only
     require(block.timestamp >= feeWithdrawnTimestamp + feeTimelock, 'S44'); // Can't withdraw fees yet
-    require(to != manager, 'S45'); // Can't withdraw fees to fund manager wallet
     feeWithdrawnTimestamp = block.timestamp;
     uint256 usdAmount = (fundAmount * aum) / totalSupply();
     _burn(address(this), fundAmount);
@@ -661,8 +664,8 @@ contract SmartFund is Initializable, FeeDividendToken {
         usdToken.allowance(manager, address(factory)) >= usdAmount,
       'S43'
     ); // Not enough usd tokens available and approved
-    factory.usdTransferFrom(manager, to, usdAmount);
-    emit FeesWithdrawn(to, fundAmount, usdAmount);
+    factory.usdTransferFrom(manager, feeBeneficiary, usdAmount);
+    emit FeesWithdrawn(feeBeneficiary, fundAmount, usdAmount);
     emit NavUpdated(aum, totalSupply());
   }
 
@@ -693,6 +696,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       _managementFee <= managementFee && _performanceFee <= performanceFee,
       'S48'
     ); // Can't increase fees
+    require(_feeBeneficiary != address(0) && _feeBeneficiary != manager, 'S51'); // Invalid fee beneficiary
     managementFee = _managementFee;
     performanceFee = _performanceFee;
     feeBeneficiary = _feeBeneficiary;

@@ -54,7 +54,7 @@ describe('Fund', () => {
   step('Should create fund', async () => {
     const initialAum = await usdToken.balanceOf(owner.address);
     const tx = await factory.newFund(
-      [wallets[1].address, owner.address, owner.address],
+      [wallets[1].address, owner.address, wallets[5].address],
       [
         1,
         200,
@@ -228,7 +228,7 @@ describe('Fund', () => {
       .div(await fund.totalSupply());
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(0);
     await usdToken.approve(factory.address, ethers.constants.MaxUint256);
-    await fund.withdrawFees(wallets[5].address, feesFundAmount);
+    await fund.withdrawFees(feesFundAmount);
     expect(await fund.balanceOf(fund.address)).to.eq(0);
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(usdAmount);
   });
