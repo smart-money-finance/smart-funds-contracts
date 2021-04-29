@@ -55,5 +55,7 @@
   "S46": "Fund is in the process of closing",
   "S47": "Fund is in the process of closing",
   "S48": "Can't increase fees",
-  "S49": "Manager or fee beneficiary only"
+  "S49": "Manager or fee beneficiary only",
+  "S50": "Invalid fee beneficiary",
+  "S51": "Invalid fee beneficiary"
 }
