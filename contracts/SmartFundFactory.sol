@@ -18,8 +18,8 @@ contract SmartFundFactory is Ownable {
     string name;
   }
   mapping(address => Manager) public managerWhitelist;
-  mapping(address => address) public managerToFund;
   bool public bypassWhitelist;
+  mapping(address => address) public custodianToFund;
 
   event ManagerWhitelisted(address indexed manager, string name);
   event FundCreated(address indexed fund);
@@ -35,35 +35,35 @@ contract SmartFundFactory is Ownable {
   }
 
   function newFund(
-    address[3] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary
-    uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
-    bool signedAum,
+    address[4] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary, custodian
+    uint256[9] memory uintParams, // timelock, managementFee, performanceFee, initialAum, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
+    bool[2] memory boolParams, // investmentRequestsEnabled, redemptionRequestsEnabled
     string memory name,
     string memory symbol,
     string memory logoUrl,
     string memory contactInfo,
     string memory initialInvestorName,
     string memory tags,
-    bytes memory signature
+    string memory aumIpfsHash
   ) public {
-    require(managerToFund[msg.sender] == address(0), 'F0'); // This address already manages a fund
+    require(custodianToFund[addressParams[3]] == address(0), 'F0'); // Custodian is already used for another fund
     require(bypassWhitelist || managerWhitelist[msg.sender].whitelisted, 'F3'); // Not whitelisted as a fund manager
     SmartFund fund = SmartFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       addressParams,
       uintParams,
-      signedAum,
+      boolParams,
       name,
       symbol,
       logoUrl,
       contactInfo,
       initialInvestorName,
       tags,
-      signature,
+      aumIpfsHash,
       msg.sender
     );
     funds.push(fund);
-    managerToFund[msg.sender] = address(fund);
+    custodianToFund[addressParams[3]] = address(fund);
     emit FundCreated(address(fund));
   }
 
@@ -72,7 +72,10 @@ contract SmartFundFactory is Ownable {
     address to,
     uint256 amount
   ) public {
-    require(msg.sender == managerToFund[SmartFund(msg.sender).manager()], 'F1'); // Only callable by funds
+    require(
+      msg.sender == custodianToFund[SmartFund(msg.sender).custodian()],
+      'F1'
+    ); // Only callable by funds
     usdToken.transferFrom(from, to, amount);
   }
 

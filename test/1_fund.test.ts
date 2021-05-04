@@ -54,49 +54,31 @@ describe('Fund', () => {
   step('Should create fund', async () => {
     const initialAum = await usdToken.balanceOf(owner.address);
     const tx = await factory.newFund(
-      [wallets[1].address, owner.address, wallets[5].address],
-      [
-        1,
-        200,
-        2000,
-        initialAum,
-        ethers.constants.MaxUint256,
-        20,
-        5,
-        10000000,
-        1,
-        1,
-      ],
-      false,
+      [wallets[1].address, owner.address, wallets[5].address, owner.address],
+      [1, 200, 2000, initialAum, 20, 5, 10000000, 1, 1],
+      [true, true],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
       'bob@bob.com',
       'Bob',
       'Hedge Fund,Test Fund,Other tag',
-      '0x00',
+      '',
     );
     const txResp = await tx.wait();
     const fundAddress = txResp.events.find(
       (event: Event) => event.event === 'FundCreated',
     ).args.fund;
     fund = await ethers.getContractAt('SmartFund', fundAddress);
-    const request = await fund.investmentRequests(0);
     const investment = await fund.investments(0);
     const initalPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
     expect(await fund.aum()).to.eq(initialAum);
-    expect({ ...request }).to.deep.include({
-      investor: wallets[1].address,
-      usdAmount: initialAum,
-      investmentId: ethers.BigNumber.from(0),
-      status: 2, // processed
-    });
     expect({ ...investment }).to.deep.include({
       investor: wallets[1].address,
       initialUsdAmount: initialAum,
       initialFundAmount: initialAum.mul(100),
       initialHighWaterPrice: initalPrice,
-      investmentRequestId: ethers.BigNumber.from(0),
+      investmentRequestId: ethers.constants.MaxUint256,
       redeemed: false,
     });
     expect((await fund.whitelist(wallets[1].address)).whitelisted).to.eq(true);
@@ -135,7 +117,7 @@ describe('Fund', () => {
     await usdToken.connect(owner).faucet(ethers.utils.parseUnits('1000', 6));
     const newAum = await usdToken.balanceOf(owner.address);
     const supply = await fund.totalSupply();
-    await fund.updateAum(newAum, ethers.constants.MaxUint256, 0, 0, '0x00');
+    await fund.updateAum(newAum, ethers.constants.MaxUint256, 0, 0, '');
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
     const price = newAum.mul(ethers.utils.parseUnits('1', 18)).div(supply);
     expect(await fund.aum()).to.eq(newAum);
@@ -162,13 +144,13 @@ describe('Fund', () => {
         ethers.constants.MaxUint256,
       );
 
-    const request = await fund.investmentRequests(1);
+    const request = await fund.investmentRequests(0);
     expect(await fund.aum()).to.eq(aumBefore);
     expect(await fund.totalSupply()).to.eq(supplyBefore);
     expect({ ...request }).to.deep.include({
       investor: wallets[2].address,
       usdAmount: amountToInvest,
-      investmentId: ethers.BigNumber.from(0),
+      investmentId: ethers.constants.MaxUint256,
       status: 0, // pending
     });
     expect(await usdToken.balanceOf(fund.address)).to.eq(amountToInvest);
@@ -180,10 +162,10 @@ describe('Fund', () => {
     async () => {
       const newAum = await usdToken.balanceOf(owner.address);
       const supply = await fund.totalSupply();
-      await fund.updateAum(newAum, ethers.constants.MaxUint256, 1, 0, '0x00');
+      await fund.updateAum(newAum, ethers.constants.MaxUint256, 1, 0, '');
       const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
       const price = newAum.mul(ethers.utils.parseUnits('1', 18)).div(supply);
-      const request = await fund.investmentRequests(1);
+      const request = await fund.investmentRequests(0);
       const fundMinted = request.usdAmount.mul(supply).div(newAum);
       const investment = await fund.investments(1);
       const aumAfter = await fund.aum();
@@ -206,7 +188,7 @@ describe('Fund', () => {
         initialUsdAmount: request.usdAmount,
         initialFundAmount: fundMinted,
         // initialHighWaterPrice: priceAfter,
-        investmentRequestId: ethers.BigNumber.from(1),
+        investmentRequestId: ethers.BigNumber.from(0),
         redeemed: false,
       });
       expect(await usdToken.balanceOf(fund.address)).to.eq(0);

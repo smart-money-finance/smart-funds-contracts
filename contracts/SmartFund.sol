@@ -3,22 +3,16 @@
 pragma solidity ^0.8.4;
 
 import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
-import '@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol';
 
 import './FeeDividendToken.sol';
 import './SmartFundFactory.sol';
 
 // import 'hardhat/console.sol';
 
-// TODO:
-// figure out how to allow selling of parts of investments
-// maybe close out an investment and open a new one with the remaining amount after fee extraction?
-// maybe link them together so client can know which ones are splits of others
-// also consider solutions to wallet loss/theft, should manager have admin power to reassign investments to different addresses?
-
 contract SmartFund is Initializable, FeeDividendToken {
   SmartFundFactory internal factory;
   ERC20 internal usdToken;
+  address public custodian;
   address public manager;
   address public aumUpdater;
   address public feeBeneficiary;
@@ -27,13 +21,15 @@ contract SmartFund is Initializable, FeeDividendToken {
   uint256 public performanceFee; // basis points
   uint256 public feeTimelock;
   uint256 public redemptionWaitingPeriod;
-  bool public signedAum;
   string public logoUrl;
   string public contactInfo;
   string public tags;
   uint256 public maxInvestors;
   uint256 public maxInvestmentsPerInvestor;
   uint256 public minInvestmentAmount; // in usd token decimals
+  bool public investmentRequestsEnabled; // whether an investor can make a request for investment with escrowed usd
+  bool public redemptionRequestsEnabled; // whether an investor can make a request for redemption
+  bool public closed; // set true after last investment redeems
 
   uint256 public aum;
   uint256 public aumTimestamp; // block timestamp of last aum update
@@ -89,7 +85,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   RedemptionRequest[] public redemptionRequests;
   uint256 public nextRedemptionRequestIndex;
 
-  event NavUpdated(uint256 aum, uint256 totalSupply);
+  event NavUpdated(uint256 aum, uint256 totalSupply, string ipfsHash);
   event Whitelisted(address indexed investor, string name);
   event Blacklisted(address indexed investor);
   event InvestmentRequested(
@@ -123,7 +119,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   event Redeemed(
     address indexed investor,
     uint256 fundAmount,
-    uint256 performanceFeeFundAmount, // will be 0 unless this investment was made after the last high water mark happened
+    uint256 performanceFeeFundAmount,
     uint256 usdAmount,
     uint256 investmentId,
     uint256 redemptionRequestId
@@ -138,68 +134,87 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 fundAmount,
     uint256 usdAmount
   );
+  event FeesChanged(uint256 managementFee, uint256 performanceFee);
   event NewHighWaterPrice(uint256 indexed price);
+  event Closed();
 
   function initialize(
-    address[3] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary
-    uint256[10] memory uintParams, // timelock, managementFee, performanceFee, initialAum, deadline, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
-    bool _signedAum,
+    address[4] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary, custodian
+    uint256[9] memory uintParams, // timelock, managementFee, performanceFee, initialAum, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock, redemptionWaitingPeriod
+    bool[2] memory boolParams, // investmentRequestsEnabled, redemptionRequestsEnabled
     string memory name,
     string memory symbol,
     string memory _logoUrl,
     string memory _contactInfo,
     string memory initialInvestorName,
     string memory _tags,
-    bytes memory signature,
+    string memory aumIpfsHash,
     address _manager
-  ) public initializer onlyBefore(uintParams[4]) {
+  ) public initializer {
     _FeeDividendToken_init(name, symbol, 6);
-    require(uintParams[3] > 0, 'S0'); // Initial AUM must be greater than 0
+    require(addressParams[3] != address(0), 'S52'); // Invalid custodian
     require(
-      addressParams[2] != address(0) && addressParams[2] != _manager,
+      addressParams[2] != address(0) && addressParams[2] != addressParams[3],
       'S50'
     ); // Invalid fee beneficiary
+    require(uintParams[3] == 0 || addressParams[0] != address(0), 'S53'); // Initial investor must be set if initial AUM is not 0
     factory = SmartFundFactory(msg.sender);
     usdToken = factory.usdToken();
     manager = _manager;
     aumUpdater = addressParams[1];
     feeBeneficiary = addressParams[2];
-    signedAum = _signedAum;
+    custodian = addressParams[3];
     timelock = uintParams[0];
     managementFee = uintParams[1];
     performanceFee = uintParams[2];
-    feeTimelock = uintParams[8];
-    redemptionWaitingPeriod = uintParams[9];
-    maxInvestors = uintParams[5];
-    maxInvestmentsPerInvestor = uintParams[6];
-    minInvestmentAmount = uintParams[7];
+    feeTimelock = uintParams[7];
+    redemptionWaitingPeriod = uintParams[8];
+    maxInvestors = uintParams[4];
+    maxInvestmentsPerInvestor = uintParams[5];
+    minInvestmentAmount = uintParams[6];
+    investmentRequestsEnabled = boolParams[0];
+    redemptionRequestsEnabled = boolParams[1];
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
     tags = _tags;
     aumTimestamp = block.timestamp;
     highWaterPrice = 1e16; // initial price of $0.01
     highWaterPriceTimestamp = block.timestamp;
-    _addToWhitelist(addressParams[0], initialInvestorName);
-    _addInvestmentRequest(
-      addressParams[0],
-      uintParams[3],
-      1,
-      type(uint256).max,
-      block.timestamp + 24 hours
-    );
-    _addInvestment(0);
-    nextInvestmentRequestIndex = 1;
-    _verifyAumSignature(manager, uintParams[4], signature);
+    if (addressParams[0] != address(0)) {
+      _addToWhitelist(addressParams[0], initialInvestorName);
+    }
+    if (uintParams[3] > 0) {
+      activeAndPendingInvestmentCount = 1;
+      activeAndPendingInvestmentCountPerInvestor[addressParams[0]] = 1;
+      _addInvestment(
+        0,
+        addressParams[0],
+        uintParams[3],
+        uintParams[3] * 100, // initial price of 1 cent
+        type(uint256).max
+      );
+      emit NavUpdated(aum, totalSupply(), aumIpfsHash);
+    }
     emit NewHighWaterPrice(highWaterPrice);
   }
 
   modifier onlyManager() {
-    require(msg.sender == manager, 'S1'); // Fund manager only
+    require(msg.sender == manager, 'S1'); // Manager only
+    _;
+  }
+
+  modifier onlyAumUpdater() {
+    require(msg.sender == aumUpdater, 'S54'); // AUM updater only
     _;
   }
 
   modifier onlyWhitelisted() {
     require(whitelist[msg.sender].whitelisted, 'S3'); // Whitelisted investors only
+    _;
+  }
+
+  modifier notClosed() {
+    require(!closed, 'S57'); // Fund is closed
     _;
   }
 
@@ -211,17 +226,16 @@ contract SmartFund is Initializable, FeeDividendToken {
   function updateAum(
     uint256 _aum,
     uint256 deadline,
-    uint256 earlyInvestmentsToProcess,
-    uint256 earlyRedemptionsToProcess,
-    bytes calldata signature
-  ) public onlyBefore(deadline) {
+    uint256 extraInvestmentsToProcess,
+    uint256 extraRedemptionsToProcess,
+    string calldata ipfsHash
+  ) public notClosed onlyAumUpdater onlyBefore(deadline) {
     uint256 previousAumTimestamp = aumTimestamp;
     uint256 previousHighWaterPrice = highWaterPrice;
     aum = _aum;
     aumTimestamp = block.timestamp;
-    _verifyAumSignature(msg.sender, deadline, signature);
     uint256 supply = totalSupply();
-    emit NavUpdated(_aum, supply);
+    emit NavUpdated(_aum, supply, ipfsHash);
     uint256 price = (aum * 1e18) / supply;
     if (price > highWaterPrice) {
       highWaterPrice = price;
@@ -229,8 +243,8 @@ contract SmartFund is Initializable, FeeDividendToken {
       emit NewHighWaterPrice(highWaterPrice);
     }
     _processFees(previousAumTimestamp, previousHighWaterPrice);
-    _processInvestments(earlyInvestmentsToProcess);
-    _processRedemptions(earlyRedemptionsToProcess);
+    _processInvestments(extraInvestmentsToProcess);
+    _processRedemptions(extraRedemptionsToProcess);
   }
 
   function _processInvestments(uint256 investmentsToProcess) internal {
@@ -239,7 +253,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       if (nextInvestmentRequestIndex == investmentRequests.length) {
         return;
       }
-      _addInvestment(nextInvestmentRequestIndex);
+      _addInvestmentFromRequest(nextInvestmentRequestIndex);
       nextInvestmentRequestIndex++;
     }
   }
@@ -260,13 +274,14 @@ contract SmartFund is Initializable, FeeDividendToken {
         }
         earlyRedemptionsToProcess--;
       }
-      _redeem(nextRedemptionRequestIndex);
+      _redeemFromRequest(nextRedemptionRequestIndex);
       nextRedemptionRequestIndex++;
     }
   }
 
   function whitelistMulti(address[] calldata investors, string[] calldata names)
     public
+    notClosed
     onlyManager
   {
     for (uint256 i = 0; i < investors.length; i++) {
@@ -277,16 +292,17 @@ contract SmartFund is Initializable, FeeDividendToken {
   function _addToWhitelist(address investor, string memory name) internal {
     require(investorCount < maxInvestors, 'S5'); // Too many investors
     require(!whitelist[investor].whitelisted, 'S6'); // Investor is already whitelisted
-    require(investor != manager, 'S31'); // Manager can't be investor
+    require(investor != custodian, 'S31'); // Custodian can't be investor
     investorCount++;
     whitelist[investor] = Investor({ whitelisted: true, name: name });
     emit Whitelisted(investor, name);
   }
 
-  function blacklistMultiAndForceRedeem(
-    address[] calldata investors,
-    uint256[] calldata investmentIdsToRedeem
-  ) public onlyManager {
+  function blacklistMulti(address[] calldata investors)
+    public
+    notClosed
+    onlyManager
+  {
     for (uint256 i = 0; i < investors.length; i++) {
       require(
         activeAndPendingInvestmentCountPerInvestor[investors[i]] == 0,
@@ -297,9 +313,6 @@ contract SmartFund is Initializable, FeeDividendToken {
       delete whitelist[investors[i]];
       emit Blacklisted(investors[i]);
     }
-    for (uint256 i = 0; i < investmentIdsToRedeem.length; i++) {
-      _addRedemptionRequest(investmentIdsToRedeem[i], 1);
-    }
   }
 
   function requestInvestment(
@@ -308,7 +321,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 maxFundAmount,
     uint256 investmentDeadline,
     uint256 deadline
-  ) public onlyWhitelisted onlyBefore(deadline) {
+  ) public notClosed onlyWhitelisted onlyBefore(deadline) {
+    require(investmentRequestsEnabled, 'S55'); // Investment requests are disabled
     require(
       activeAndPendingInvestmentCountPerInvestor[msg.sender] <
         maxInvestmentsPerInvestor,
@@ -317,11 +331,6 @@ contract SmartFund is Initializable, FeeDividendToken {
     require(usdAmount >= minInvestmentAmount, 'S9'); // Less than minimum investment amount
     require(minFundAmount > 0, 'S10'); // Minimum fund amount returned must be greater than 0
     require(investmentDeadline >= block.timestamp + 24 hours, 'S35'); // Investment deadline too short
-    require(
-      redemptionRequests.length == 0 ||
-        redemptionRequests[redemptionRequests.length - 1].investmentId != 0,
-      'S47'
-    ); // Fund is in the process of closing
     _addInvestmentRequest(
       msg.sender,
       usdAmount,
@@ -346,14 +355,11 @@ contract SmartFund is Initializable, FeeDividendToken {
         maxFundAmount: maxFundAmount,
         timestamp: block.timestamp,
         deadline: investmentDeadline,
-        investmentId: 0,
+        investmentId: type(uint256).max,
         status: RequestStatus.Pending
       })
     );
-    // only skip transferring on the initial investment
-    if (investmentRequests.length > 1) {
-      factory.usdTransferFrom(investor, address(this), usdAmount);
-    }
+    factory.usdTransferFrom(investor, address(this), usdAmount);
     activeAndPendingInvestmentCount++;
     activeAndPendingInvestmentCountPerInvestor[investor]++;
     emit InvestmentRequested(
@@ -368,7 +374,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   function cancelInvestmentRequest(
     uint256 investmentRequestId,
     uint256 deadline
-  ) public onlyWhitelisted onlyBefore(deadline) {
+  ) public onlyBefore(deadline) {
     InvestmentRequest storage investmentRequest =
       investmentRequests[investmentRequestId];
     require(investmentRequest.status == RequestStatus.Pending, 'S36'); // Investment request is no longer pending
@@ -383,6 +389,10 @@ contract SmartFund is Initializable, FeeDividendToken {
       investmentRequest.investor,
       investmentRequestId
     );
+    if (activeAndPendingInvestmentCount == 0 && investments.length > 0) {
+      closed = true;
+      emit Closed();
+    }
   }
 
   function requestRedemption(
@@ -390,24 +400,12 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 minUsdAmount,
     uint256 deadline
   ) public onlyBefore(deadline) {
+    require(redemptionRequestsEnabled, 'S56'); // Redemption requests are disabled
     Investment storage investment = investments[investmentId];
     require(investment.investor == msg.sender, 'S13'); // Investor does not own that investment
-    _addRedemptionRequest(investmentId, minUsdAmount);
-  }
-
-  function _addRedemptionRequest(uint256 investmentId, uint256 minUsdAmount)
-    internal
-  {
-    Investment storage investment = investments[investmentId];
     require(investment.redeemed == false, 'S14'); // Investment already redeemed
     require(investment.timestamp + timelock <= block.timestamp, 'S15'); // Investment is still locked up
     require(minUsdAmount > 0, 'S39'); // Min amount must be greater than 0
-    require(
-      redemptionRequests.length == 0 ||
-        redemptionRequests[redemptionRequests.length - 1].investmentId != 0,
-      'S46'
-    ); // Fund is in the process of closing
-    require(investmentId != 0 || activeAndPendingInvestmentCount == 1, 'S40'); // Initial investment can only be redeemed after all other investments
     uint256 redemptionRequestId = redemptionRequests.length;
     if (redemptionRequestId > 0) {
       RedemptionRequest storage redemptionRequest =
@@ -436,7 +434,32 @@ contract SmartFund is Initializable, FeeDividendToken {
     );
   }
 
-  function _addInvestment(uint256 investmentRequestId) internal {
+  function addManualInvestment(address investor, uint256 usdAmount)
+    public
+    notClosed
+    onlyManager
+  {
+    require(whitelist[investor].whitelisted, 'S58'); // Investor isn't whitelisted
+    uint256 investmentId = investments.length;
+    uint256 fundAmount;
+    // if intialization investment, use price of 1 cent
+    if (investmentId == 0) {
+      fundAmount = usdAmount * 100;
+    } else {
+      fundAmount = (usdAmount * totalSupply()) / aum;
+    }
+    activeAndPendingInvestmentCount++;
+    activeAndPendingInvestmentCountPerInvestor[investor]++;
+    _addInvestment(
+      investmentId,
+      investor,
+      usdAmount,
+      fundAmount,
+      type(uint256).max
+    );
+  }
+
+  function _addInvestmentFromRequest(uint256 investmentRequestId) internal {
     InvestmentRequest storage investmentRequest =
       investmentRequests[investmentRequestId];
     // if the investor already withdrew his investment after the deadline
@@ -450,7 +473,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     ) {
       uint256 investmentId = investments.length;
       uint256 fundAmount;
-      // if intialization investment, use price of 1 cent
+      // if initialization investment, use price of 1 cent
       if (investmentId == 0) {
         fundAmount = investmentRequest.usdAmount * 100;
       } else {
@@ -463,33 +486,14 @@ contract SmartFund is Initializable, FeeDividendToken {
         // investment succeeds
         investmentRequest.status = RequestStatus.Processed;
         investmentRequest.investmentId = investmentId;
-        // don't transfer tokens if it's the initialization investment
-        if (investmentId != 0) {
-          usdToken.transfer(manager, investmentRequest.usdAmount);
-        }
-        aum += investmentRequest.usdAmount;
-        _mint(investmentRequest.investor, fundAmount);
-        investments.push(
-          Investment({
-            investor: investmentRequest.investor,
-            initialUsdAmount: investmentRequest.usdAmount,
-            initialFundAmount: fundAmount,
-            initialBaseAmount: toBase(fundAmount),
-            initialHighWaterPrice: highWaterPrice,
-            timestamp: block.timestamp,
-            investmentRequestId: investmentRequestId,
-            redemptionRequestId: 0,
-            redeemed: false
-          })
-        );
-        emit Invested(
+        usdToken.transfer(custodian, investmentRequest.usdAmount);
+        _addInvestment(
+          investmentId,
           investmentRequest.investor,
           investmentRequest.usdAmount,
           fundAmount,
-          investmentId,
           investmentRequestId
         );
-        emit NavUpdated(aum, totalSupply());
         return;
       }
     }
@@ -503,9 +507,68 @@ contract SmartFund is Initializable, FeeDividendToken {
       investmentRequest.investor,
       investmentRequestId
     );
+    if (activeAndPendingInvestmentCount == 0 && investments.length > 0) {
+      closed = true;
+      emit Closed();
+    }
   }
 
-  function _redeem(uint256 redemptionRequestId) internal {
+  function _addInvestment(
+    uint256 investmentId,
+    address investor,
+    uint256 usdAmount,
+    uint256 fundAmount,
+    uint256 investmentRequestId
+  ) internal {
+    aum += usdAmount;
+    _mint(investor, fundAmount);
+    investments.push(
+      Investment({
+        investor: investor,
+        initialUsdAmount: usdAmount,
+        initialFundAmount: fundAmount,
+        initialBaseAmount: toBase(fundAmount),
+        initialHighWaterPrice: highWaterPrice,
+        timestamp: block.timestamp,
+        investmentRequestId: investmentRequestId,
+        redemptionRequestId: type(uint256).max,
+        redeemed: false
+      })
+    );
+    emit Invested(
+      investor,
+      usdAmount,
+      fundAmount,
+      investmentId,
+      investmentRequestId
+    );
+    emit NavUpdated(aum, totalSupply(), '');
+  }
+
+  function addManualRedemption(uint256 investmentId, bool transferUsd)
+    public
+    onlyManager
+  {
+    Investment storage investment = investments[investmentId];
+    require(!investment.redeemed, 'S59'); // Investment already redeemed
+    uint256 performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
+    uint256 fundAmount = fromBase(investment.initialBaseAmount);
+    uint256 usdAmount =
+      ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
+    if (transferUsd) {
+      // transfer usd to investor
+      _transferUsdFromCustodian(investment.investor, usdAmount);
+    }
+    _redeem(
+      investmentId,
+      fundAmount,
+      performanceFeeFundAmount,
+      usdAmount,
+      type(uint256).max
+    );
+  }
+
+  function _redeemFromRequest(uint256 redemptionRequestId) internal {
     RedemptionRequest storage redemptionRequest =
       redemptionRequests[redemptionRequestId];
     Investment storage investment = investments[redemptionRequest.investmentId];
@@ -517,37 +580,16 @@ contract SmartFund is Initializable, FeeDividendToken {
         ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
       if (usdAmount >= redemptionRequest.minUsdAmount) {
         // success
-        // mark investment as redeemed and lower total investment count
-        investment.redeemed = true;
-        activeAndPendingInvestmentCount--;
-        activeAndPendingInvestmentCountPerInvestor[investment.investor]--;
         redemptionRequest.status = RequestStatus.Processed;
-        // burn fund tokens
-        _burn(investment.investor, fundAmount);
-        if (performanceFeeFundAmount > 0) {
-          // mint performance fee tokens
-          _mint(address(this), performanceFeeFundAmount);
-        }
-        // subtract usd amount from aum
-        aum -= usdAmount;
-        if (redemptionRequest.investmentId != 0) {
-          // transfer usd to investor
-          require(
-            usdToken.balanceOf(manager) >= usdAmount &&
-              usdToken.allowance(manager, address(factory)) >= usdAmount,
-            'S42'
-          ); // Not enough usd tokens available and approved
-          factory.usdTransferFrom(manager, investment.investor, usdAmount);
-        }
-        emit Redeemed(
-          investment.investor,
+        // transfer usd to investor
+        _transferUsdFromCustodian(investment.investor, usdAmount);
+        _redeem(
+          redemptionRequest.investmentId,
           fundAmount,
           performanceFeeFundAmount,
           usdAmount,
-          redemptionRequest.investmentId,
           redemptionRequestId
         );
-        emit NavUpdated(aum, totalSupply());
         return;
       }
     }
@@ -557,6 +599,41 @@ contract SmartFund is Initializable, FeeDividendToken {
       redemptionRequest.investor,
       redemptionRequestId
     );
+  }
+
+  function _redeem(
+    uint256 investmentId,
+    uint256 fundAmount,
+    uint256 performanceFeeFundAmount,
+    uint256 usdAmount,
+    uint256 redemptionRequestId
+  ) internal {
+    Investment storage investment = investments[investmentId];
+    // mark investment as redeemed and lower total investment count
+    investment.redeemed = true;
+    activeAndPendingInvestmentCount--;
+    activeAndPendingInvestmentCountPerInvestor[investment.investor]--;
+    // burn fund tokens
+    _burn(investment.investor, fundAmount);
+    if (performanceFeeFundAmount > 0) {
+      // mint performance fee tokens
+      _mint(address(this), performanceFeeFundAmount);
+    }
+    // subtract usd amount from aum
+    aum -= usdAmount;
+    emit Redeemed(
+      investment.investor,
+      fundAmount,
+      performanceFeeFundAmount,
+      usdAmount,
+      investmentId,
+      redemptionRequestId
+    );
+    emit NavUpdated(aum, totalSupply(), '');
+    if (activeAndPendingInvestmentCount == 0) {
+      closed = true;
+      emit Closed();
+    }
   }
 
   function _processFees(
@@ -652,39 +729,39 @@ contract SmartFund is Initializable, FeeDividendToken {
     performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
   }
 
-  function withdrawFees(uint256 fundAmount) public {
-    require(msg.sender == manager || msg.sender == feeBeneficiary, 'S49'); // Manager or fee beneficiary only
+  function withdrawFees(uint256 fundAmount) public onlyManager {
     require(block.timestamp >= feeWithdrawnTimestamp + feeTimelock, 'S44'); // Can't withdraw fees yet
     feeWithdrawnTimestamp = block.timestamp;
     uint256 usdAmount = (fundAmount * aum) / totalSupply();
     _burn(address(this), fundAmount);
     aum -= usdAmount;
-    require(
-      usdToken.balanceOf(manager) >= usdAmount &&
-        usdToken.allowance(manager, address(factory)) >= usdAmount,
-      'S43'
-    ); // Not enough usd tokens available and approved
-    factory.usdTransferFrom(manager, feeBeneficiary, usdAmount);
+    _transferUsdFromCustodian(feeBeneficiary, usdAmount);
     emit FeesWithdrawn(feeBeneficiary, fundAmount, usdAmount);
-    emit NavUpdated(aum, totalSupply());
+    emit NavUpdated(aum, totalSupply(), '');
   }
 
-  function editLogo(string calldata _logoUrl) public onlyManager {
+  function editFundDetails(
+    string calldata _logoUrl,
+    string calldata _contactInfo,
+    string calldata _tags
+  ) public onlyManager {
     logoUrl = _logoUrl;
-  }
-
-  function editContactInfo(string calldata _contactInfo) public onlyManager {
     contactInfo = _contactInfo;
+    tags = _tags;
   }
 
   function editInvestorLimits(
     uint256 _maxInvestors,
     uint256 _maxInvestmentsPerInvestor,
-    uint256 _minInvestmentAmount
+    uint256 _minInvestmentAmount,
+    bool _investmentRequestsEnabled,
+    bool _redemptionRequestsEnabled
   ) public onlyManager {
     maxInvestors = _maxInvestors;
     maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
     minInvestmentAmount = _minInvestmentAmount;
+    investmentRequestsEnabled = _investmentRequestsEnabled;
+    redemptionRequestsEnabled = _redemptionRequestsEnabled;
   }
 
   function editFees(
@@ -696,7 +773,13 @@ contract SmartFund is Initializable, FeeDividendToken {
       _managementFee <= managementFee && _performanceFee <= performanceFee,
       'S48'
     ); // Can't increase fees
-    require(_feeBeneficiary != address(0) && _feeBeneficiary != manager, 'S51'); // Invalid fee beneficiary
+    require(
+      _feeBeneficiary != address(0) && _feeBeneficiary != custodian,
+      'S51'
+    ); // Invalid fee beneficiary
+    if (_managementFee != managementFee || _performanceFee != performanceFee) {
+      emit FeesChanged(_managementFee, _performanceFee);
+    }
     managementFee = _managementFee;
     performanceFee = _performanceFee;
     feeBeneficiary = _feeBeneficiary;
@@ -706,24 +789,13 @@ contract SmartFund is Initializable, FeeDividendToken {
     aumUpdater = _aumUpdater;
   }
 
-  function _verifyAumSignature(
-    address sender,
-    uint256 deadline,
-    bytes memory signature
-  ) internal view {
-    if (!signedAum) {
-      require(sender == manager || sender == aumUpdater, 'S28'); // Manager or AUM updater only
-    } else if (sender == manager || sender == aumUpdater) {
-      bytes32 message = keccak256(abi.encode(sender, aum, deadline));
-      address signer =
-        ECDSAUpgradeable.recover(
-          ECDSAUpgradeable.toEthSignedMessageHash(message),
-          signature
-        );
-      require(signer == factory.owner(), 'S29'); // AUM signer mismatch
-    } else {
-      require(sender == factory.owner(), 'S30'); // AUM signer only
-    }
+  function _transferUsdFromCustodian(address to, uint256 amount) internal {
+    require(
+      usdToken.balanceOf(custodian) >= amount &&
+        usdToken.allowance(custodian, address(factory)) >= amount,
+      'S42'
+    ); // Not enough usd tokens available and approved
+    factory.usdTransferFrom(custodian, to, amount);
   }
 
   function _beforeTokenTransfer(
