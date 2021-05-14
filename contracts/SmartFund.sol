@@ -36,6 +36,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   uint256 public highWaterPrice; // highest ((aum * 10^18) / supply)
   uint256 public highWaterPriceTimestamp; // timestamp of highest price
   uint256 public feeWithdrawnTimestamp;
+  uint256 public capitalContributed;
 
   struct Investor {
     bool whitelisted;
@@ -293,7 +294,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   function _addToWhitelist(address investor, string memory name) internal {
     require(investorCount < maxInvestors, 'S5'); // Too many investors
     require(!whitelist[investor].whitelisted, 'S6'); // Investor is already whitelisted
-    // require(investor != custodian, 'S31'); // Custodian can't be investor
+    require(maxInvestors == 1 || investor != custodian, 'S31'); // Custodian can't be investor
     investorCount++;
     whitelist[investor] = Investor({ whitelisted: true, name: name });
     emit Whitelisted(investor, name);
@@ -537,6 +538,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       })
     );
     investmentsCount++;
+    capitalContributed += usdAmount;
     emit Invested(
       investor,
       usdAmount,
@@ -623,6 +625,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     }
     // subtract usd amount from aum
     aum -= usdAmount;
+    capitalContributed -= investment.initialUsdAmount;
     emit Redeemed(
       investment.investor,
       fundAmount,
@@ -759,7 +762,10 @@ contract SmartFund is Initializable, FeeDividendToken {
     bool _investmentRequestsEnabled,
     bool _redemptionRequestsEnabled
   ) public onlyManager {
-    require(maxInvestors > 1 || _maxInvestors == 1, 'S60'); // Can't increase max investors on a managed account
+    require(
+      maxInvestors == _maxInvestors || (maxInvestors > 1 && _maxInvestors > 1),
+      'S60'
+    ); // Invalid max investors amount
     maxInvestors = _maxInvestors;
     maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
     minInvestmentAmount = _minInvestmentAmount;
