@@ -759,6 +759,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     bool _investmentRequestsEnabled,
     bool _redemptionRequestsEnabled
   ) public onlyManager {
+    require(maxInvestors > 1 || _maxInvestors == 1, 'S60'); // Can't increase max investors on a managed account
     maxInvestors = _maxInvestors;
     maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
     minInvestmentAmount = _minInvestmentAmount;
