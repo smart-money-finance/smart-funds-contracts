@@ -65,5 +65,6 @@
   "S56": "Redemption requests are disabled",
   "S57": "Fund is closed",
   "S58": "Investor isn't whitelisted",
-  "S59": "Investment already redeemed"
+  "S59": "Investment already redeemed",
+  "S60": "Can't increase max investors on a managed account"
 }
