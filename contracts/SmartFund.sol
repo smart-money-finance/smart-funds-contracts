@@ -55,6 +55,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     bool redeemed;
   }
   Investment[] public investments;
+  uint256 public investmentsCount;
 
   uint256 public investorCount;
   mapping(address => uint256) public activeAndPendingInvestmentCountPerInvestor;
@@ -292,7 +293,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   function _addToWhitelist(address investor, string memory name) internal {
     require(investorCount < maxInvestors, 'S5'); // Too many investors
     require(!whitelist[investor].whitelisted, 'S6'); // Investor is already whitelisted
-    require(investor != custodian, 'S31'); // Custodian can't be investor
+    // require(investor != custodian, 'S31'); // Custodian can't be investor
     investorCount++;
     whitelist[investor] = Investor({ whitelisted: true, name: name });
     emit Whitelisted(investor, name);
@@ -535,6 +536,7 @@ contract SmartFund is Initializable, FeeDividendToken {
         redeemed: false
       })
     );
+    investmentsCount++;
     emit Invested(
       investor,
       usdAmount,
