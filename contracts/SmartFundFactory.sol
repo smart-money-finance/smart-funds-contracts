@@ -96,4 +96,8 @@ contract SmartFundFactory is Ownable {
   function allFunds() public view returns (SmartFund[] memory) {
     return funds;
   }
+
+  function enableBypassWhitelist() public onlyOwner {
+    bypassWhitelist = true;
+  }
 }

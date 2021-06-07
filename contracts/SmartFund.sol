@@ -155,10 +155,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   ) public initializer {
     _FeeDividendToken_init(name, symbol, 6);
     require(addressParams[3] != address(0), 'S52'); // Invalid custodian
-    require(
-      addressParams[2] != address(0) && addressParams[2] != addressParams[3],
-      'S50'
-    ); // Invalid fee beneficiary
+    require(addressParams[2] != addressParams[3], 'S50'); // Invalid fee beneficiary
     require(uintParams[3] == 0 || addressParams[0] != address(0), 'S53'); // Initial investor must be set if initial AUM is not 0
     factory = SmartFundFactory(msg.sender);
     usdToken = factory.usdToken();
@@ -180,6 +177,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     contactInfo = _contactInfo;
     tags = _tags;
     aumTimestamp = block.timestamp;
+    feeWithdrawnTimestamp = block.timestamp;
     highWaterPrice = 1e16; // initial price of $0.01
     highWaterPriceTimestamp = block.timestamp;
     if (addressParams[0] != address(0)) {
@@ -232,19 +230,23 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 extraRedemptionsToProcess,
     string calldata ipfsHash
   ) public notClosed onlyAumUpdater onlyBefore(deadline) {
-    uint256 previousAumTimestamp = aumTimestamp;
-    uint256 previousHighWaterPrice = highWaterPrice;
-    aum = _aum;
-    aumTimestamp = block.timestamp;
-    uint256 supply = totalSupply();
-    emit NavUpdated(_aum, supply, ipfsHash);
-    uint256 price = (aum * 1e18) / supply;
-    if (price > highWaterPrice) {
-      highWaterPrice = price;
-      highWaterPriceTimestamp = block.timestamp;
-      emit NewHighWaterPrice(highWaterPrice);
+    if (investments.length > 0) {
+      uint256 previousAumTimestamp = aumTimestamp;
+      uint256 previousHighWaterPrice = highWaterPrice;
+      aum = _aum;
+      aumTimestamp = block.timestamp;
+      uint256 supply = totalSupply();
+      emit NavUpdated(_aum, supply, ipfsHash);
+      uint256 price = (aum * 1e18) / supply;
+      if (price > highWaterPrice) {
+        highWaterPrice = price;
+        highWaterPriceTimestamp = block.timestamp;
+        emit NewHighWaterPrice(highWaterPrice);
+      }
+      _processFees(previousAumTimestamp, previousHighWaterPrice);
+    } else {
+      require(_aum == 0, 'S61'); // AUM must be 0 before the first investment
     }
-    _processFees(previousAumTimestamp, previousHighWaterPrice);
     _processInvestments(extraInvestmentsToProcess);
     _processRedemptions(extraRedemptionsToProcess);
   }
@@ -736,6 +738,7 @@ contract SmartFund is Initializable, FeeDividendToken {
 
   function withdrawFees(uint256 fundAmount) public onlyManager {
     require(block.timestamp >= feeWithdrawnTimestamp + feeTimelock, 'S44'); // Can't withdraw fees yet
+    require(feeBeneficiary != address(0), 'S62'); // Can't withdraw fees until fee beneficiary is set
     feeWithdrawnTimestamp = block.timestamp;
     uint256 usdAmount = (fundAmount * aum) / totalSupply();
     _burn(address(this), fundAmount);
