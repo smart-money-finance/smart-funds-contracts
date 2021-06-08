@@ -34,5 +34,6 @@
   "FundClosed": "Fund is closed",
   "InvalidMaxInvestors": "Invalid max investors amount",
   "FeeBeneficiaryNotSet": "Can't withdraw fees until fee beneficiary is set",
-  "InvalidFees": "Invalid fees"
+  "InvalidFees": "Invalid fees",
+  "NotActive": "Fund cannot have AUM until the first investment is made"
 }

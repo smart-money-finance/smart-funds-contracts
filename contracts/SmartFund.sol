@@ -149,6 +149,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   error WhitelistedOnly();
   error FundClosed();
   error AfterDeadline();
+  error NotActive();
   error TooManyInvestors();
   error AlreadyWhitelisted();
   error InvalidInvestor();
@@ -282,23 +283,22 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 extraRedemptionsToProcess,
     string calldata ipfsHash
   ) public notClosed onlyAumUpdater onlyBefore(deadline) {
-    if (investments.length > 0) {
-      uint256 previousAumTimestamp = aumTimestamp;
-      uint256 previousHighWaterPrice = highWaterPrice;
-      aum = _aum;
-      aumTimestamp = block.timestamp;
-      uint256 supply = totalSupply();
-      emit NavUpdated(_aum, supply, ipfsHash);
-      uint256 price = (aum * 1e18) / supply;
-      if (price > highWaterPrice) {
-        highWaterPrice = price;
-        highWaterPriceTimestamp = block.timestamp;
-        emit NewHighWaterPrice(highWaterPrice);
-      }
-      _processFees(previousAumTimestamp, previousHighWaterPrice);
-    } else {
-      require(_aum == 0, 'S61'); // AUM must be 0 before the first investment
+    if (investments.length == 0) {
+      revert NotActive(); // Fund cannot have AUM until the first investment is made
     }
+    uint256 previousAumTimestamp = aumTimestamp;
+    uint256 previousHighWaterPrice = highWaterPrice;
+    aum = _aum;
+    aumTimestamp = block.timestamp;
+    uint256 supply = totalSupply();
+    emit NavUpdated(_aum, supply, ipfsHash);
+    uint256 price = (aum * 1e18) / supply;
+    if (price > highWaterPrice) {
+      highWaterPrice = price;
+      highWaterPriceTimestamp = block.timestamp;
+      emit NewHighWaterPrice(highWaterPrice);
+    }
+    _processFees(previousAumTimestamp, previousHighWaterPrice);
     _processInvestments(extraInvestmentsToProcess);
     _processRedemptions(extraRedemptionsToProcess);
   }
@@ -419,6 +419,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 maxFundAmount,
     uint256 investmentDeadline
   ) internal {
+    uint256 investmentRequestId = investmentRequests.length;
     investmentRequests.push(
       InvestmentRequest({
         investor: investor,
@@ -439,8 +440,12 @@ contract SmartFund is Initializable, FeeDividendToken {
       usdAmount,
       minFundAmount,
       maxFundAmount,
-      investmentRequests.length - 1
+      investmentRequestId
     );
+    if (investments.length == 0) {
+      _addInvestmentFromRequest(investmentRequestId);
+      nextInvestmentRequestIndex++;
+    }
   }
 
   function cancelInvestmentRequest(
