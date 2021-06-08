@@ -24,6 +24,11 @@ contract SmartFundFactory is Ownable {
   event ManagerWhitelisted(address indexed manager, string name);
   event FundCreated(address indexed fund);
 
+  error CustodianUsed();
+  error NotWhitelisted();
+  error SenderIsNotFund();
+  error ManagerAlreadyWhitelisted();
+
   constructor(
     address _masterFundLibrary,
     ERC20 _usdToken,
@@ -46,8 +51,12 @@ contract SmartFundFactory is Ownable {
     string memory tags,
     string memory aumIpfsHash
   ) public {
-    require(custodianToFund[addressParams[3]] == address(0), 'F0'); // Custodian is already used for another fund
-    require(bypassWhitelist || managerWhitelist[msg.sender].whitelisted, 'F3'); // Not whitelisted as a fund manager
+    if (custodianToFund[addressParams[3]] != address(0)) {
+      revert CustodianUsed(); // Custodian is already used for another fund
+    }
+    if (!(bypassWhitelist || managerWhitelist[msg.sender].whitelisted)) {
+      revert NotWhitelisted(); // Not whitelisted as a fund manager
+    }
     SmartFund fund = SmartFund(Clones.clone(masterFundLibrary));
     fund.initialize(
       addressParams,
@@ -72,10 +81,9 @@ contract SmartFundFactory is Ownable {
     address to,
     uint256 amount
   ) public {
-    require(
-      msg.sender == custodianToFund[SmartFund(msg.sender).custodian()],
-      'F1'
-    ); // Only callable by funds
+    if (msg.sender != custodianToFund[SmartFund(msg.sender).custodian()]) {
+      revert SenderIsNotFund(); // Only callable by funds
+    }
     usdToken.transferFrom(from, to, amount);
   }
 
@@ -84,7 +92,9 @@ contract SmartFundFactory is Ownable {
     onlyOwner
   {
     for (uint256 i = 0; i < managers.length; i++) {
-      require(!managerWhitelist[managers[i]].whitelisted, 'F2'); // Manager is already whitelisted
+      if (managerWhitelist[managers[i]].whitelisted) {
+        revert ManagerAlreadyWhitelisted(); // Manager is already whitelisted
+      }
       managerWhitelist[managers[i]] = Manager({
         whitelisted: true,
         name: names[i]
