@@ -71,19 +71,19 @@ describe('Fund', () => {
     ).args.fund;
     fund = await ethers.getContractAt('SmartFund', fundAddress);
     const investment = await fund.investments(0);
-    const initalPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
+    const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
     expect(await fund.aum()).to.eq(initialAum);
     expect({ ...investment }).to.deep.include({
       investor: wallets[1].address,
       initialUsdAmount: initialAum,
       initialFundAmount: initialAum.mul(100),
-      initialHighWaterPrice: initalPrice,
+      initialHighWaterPrice: initialPrice,
       investmentRequestId: ethers.constants.MaxUint256,
       redeemed: false,
     });
     expect((await fund.whitelist(wallets[1].address)).whitelisted).to.eq(true);
     expect((await fund.whitelist(wallets[1].address)).name).to.eq('Bob');
-    expect(await fund.highWaterPrice()).to.eq(initalPrice);
+    expect(await fund.highWaterPrice()).to.eq(initialPrice);
     expect(await fund.activeAndPendingInvestmentCount()).to.eq(1);
     expect(
       await fund.activeAndPendingInvestmentCountPerInvestor(wallets[1].address),
