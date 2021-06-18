@@ -500,7 +500,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       revert MinAmountZero(); // Minimum amount must be greater than 0
     }
     uint256 redemptionRequestId = redemptionRequests.length;
-    if (redemptionRequestId > 0 && investment.redemptionRequestId != type(uint256).max) {
+    if (investment.redemptionRequestId != type(uint256).max) {
       RedemptionRequest storage redemptionRequest =
         redemptionRequests[investment.redemptionRequestId];
       if (
