@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "npx hardhat test",
-    "deploy-rinkeby": "npx hardhat --network rinkeby run scripts/deploy/1_v1.ts"
+    "test": "hardhat test",
+    "deploy-rinkeby": "hardhat --network rinkeby run scripts/deploy/1_v1.ts",
+    "filter-abis": "node scripts/filter-errors-from-artifact-abis.js"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
