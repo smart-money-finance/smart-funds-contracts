@@ -61,8 +61,13 @@ contract SmartFund is Initializable, FeeDividendToken {
   uint256 public investorCount;
   mapping(address => uint256) public activeAndPendingInvestmentCountPerInvestor;
   uint256 public activeAndPendingInvestmentCount;
+  uint256 public activeInvestmentCount;
 
-  enum RequestStatus { Pending, Failed, Processed }
+  enum RequestStatus {
+    Pending,
+    Failed,
+    Processed
+  }
 
   struct InvestmentRequest {
     address investor;
@@ -173,6 +178,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   error InvalidFees();
   error InsufficientUsdAvailableAndApproved();
   error NotTransferable();
+  error OpenRequestsPreventClosing();
 
   function initialize(
     address[4] memory addressParams, // initialInvestor, aumUpdater, feeBeneficiary, custodian
@@ -320,8 +326,9 @@ contract SmartFund is Initializable, FeeDividendToken {
       if (nextRedemptionRequestIndex == redemptionRequests.length) {
         return;
       }
-      RedemptionRequest storage redemptionRequest =
-        redemptionRequests[nextRedemptionRequestIndex];
+      RedemptionRequest storage redemptionRequest = redemptionRequests[
+        nextRedemptionRequestIndex
+      ];
       if (
         redemptionRequest.timestamp + redemptionWaitingPeriod < block.timestamp
       ) {
@@ -452,8 +459,9 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 investmentRequestId,
     uint256 deadline
   ) public onlyBefore(deadline) {
-    InvestmentRequest storage investmentRequest =
-      investmentRequests[investmentRequestId];
+    InvestmentRequest storage investmentRequest = investmentRequests[
+      investmentRequestId
+    ];
     if (investmentRequest.status != RequestStatus.Pending) {
       revert InvestmentNotPending(); // Investment request is no longer pending
     }
@@ -500,8 +508,9 @@ contract SmartFund is Initializable, FeeDividendToken {
       revert MinAmountZero(); // Minimum amount must be greater than 0
     }
     if (investment.redemptionRequestId != type(uint256).max) {
-      RedemptionRequest storage redemptionRequest =
-        redemptionRequests[investment.redemptionRequestId];
+      RedemptionRequest storage redemptionRequest = redemptionRequests[
+        investment.redemptionRequestId
+      ];
       if (
         redemptionRequest.investmentId == investmentId &&
         redemptionRequest.status != RequestStatus.Failed
@@ -556,8 +565,9 @@ contract SmartFund is Initializable, FeeDividendToken {
   }
 
   function _addInvestmentFromRequest(uint256 investmentRequestId) internal {
-    InvestmentRequest storage investmentRequest =
-      investmentRequests[investmentRequestId];
+    InvestmentRequest storage investmentRequest = investmentRequests[
+      investmentRequestId
+    ];
     // if the investor already withdrew his investment after the deadline
     if (investmentRequest.status == RequestStatus.Failed) {
       return;
@@ -632,6 +642,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       })
     );
     investmentsCount++;
+    activeInvestmentCount++;
     capitalContributed += usdAmount;
     emit Invested(
       investor,
@@ -651,10 +662,13 @@ contract SmartFund is Initializable, FeeDividendToken {
     if (investment.redeemed) {
       revert InvestmentRedeemed(); // Investment already redeemed
     }
+    if (activeInvestmentCount == 1 && activeAndPendingInvestmentCount > 1) {
+      revert OpenRequestsPreventClosing();
+    }
     uint256 performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
     uint256 fundAmount = fromBase(investment.initialBaseAmount);
-    uint256 usdAmount =
-      ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
+    uint256 usdAmount = ((fundAmount - performanceFeeFundAmount) * aum) /
+      totalSupply();
     if (transferUsd) {
       // transfer usd to investor
       _transferUsdFromCustodian(investment.investor, usdAmount);
@@ -669,15 +683,17 @@ contract SmartFund is Initializable, FeeDividendToken {
   }
 
   function _redeemFromRequest(uint256 redemptionRequestId) internal {
-    RedemptionRequest storage redemptionRequest =
-      redemptionRequests[redemptionRequestId];
+    RedemptionRequest storage redemptionRequest = redemptionRequests[
+      redemptionRequestId
+    ];
     Investment storage investment = investments[redemptionRequest.investmentId];
     if (!investment.redeemed) {
-      uint256 performanceFeeFundAmount =
-        _calculatePerformanceFee(redemptionRequest.investmentId);
+      uint256 performanceFeeFundAmount = _calculatePerformanceFee(
+        redemptionRequest.investmentId
+      );
       uint256 fundAmount = fromBase(investment.initialBaseAmount);
-      uint256 usdAmount =
-        ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
+      uint256 usdAmount = ((fundAmount - performanceFeeFundAmount) * aum) /
+        totalSupply();
       if (usdAmount >= redemptionRequest.minUsdAmount) {
         // success
         redemptionRequest.status = RequestStatus.Processed;
@@ -713,6 +729,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     investment.redeemed = true;
     activeAndPendingInvestmentCount--;
     activeAndPendingInvestmentCountPerInvestor[investment.investor]--;
+    activeInvestmentCount--;
     // burn fund tokens
     _burn(investment.investor, fundAmount);
     if (performanceFeeFundAmount > 0) {
@@ -743,8 +760,10 @@ contract SmartFund is Initializable, FeeDividendToken {
   ) internal {
     uint256 supply = totalSupply();
     uint256 nonFeeSupply = supply - balanceOf(address(this));
-    uint256 managementFeeFundAmount =
-      _calculateManagementFee(nonFeeSupply, previousAumTimestamp);
+    uint256 managementFeeFundAmount = _calculateManagementFee(
+      nonFeeSupply,
+      previousAumTimestamp
+    );
 
     uint256 performanceFeeFundAmount = 0;
     // if a new high water mark is reached, calculate performance fee
@@ -783,8 +802,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     returns (uint256 performanceFeeFundAmount)
   {
     Investment storage investment = investments[investmentId];
-    uint256 initialPrice =
-      (investment.initialUsdAmount * 1e18) / investment.initialFundAmount;
+    uint256 initialPrice = (investment.initialUsdAmount * 1e18) /
+      investment.initialFundAmount;
     uint256 priceNow = (aum * 1e18) / totalSupply();
     // if the last high water mark happened after the investment was made
     if (
