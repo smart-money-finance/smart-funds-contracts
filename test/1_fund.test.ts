@@ -210,7 +210,7 @@ describe('Fund', () => {
       .div(await fund.totalSupply());
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(0);
     await usdToken.approve(factory.address, ethers.constants.MaxUint256);
-    await fund.withdrawFees(feesFundAmount);
+    await fund.withdrawFees(feesFundAmount, true);
     expect(await fund.balanceOf(fund.address)).to.eq(0);
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(usdAmount);
   });
