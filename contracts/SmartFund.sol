@@ -849,18 +849,23 @@ contract SmartFund is Initializable, FeeDividendToken {
     performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
   }
 
-  function withdrawFees(uint256 fundAmount) public onlyManager {
+  function withdrawFees(uint256 fundAmount, bool transferUsd)
+    public
+    onlyManager
+  {
     if (block.timestamp < feeWithdrawnTimestamp + feeTimelock) {
       revert NotPastFeeTimelock(); // Can't withdraw fees yet
     }
-    if (feeBeneficiary == address(0)) {
-      revert FeeBeneficiaryNotSet(); // Can't withdraw fees until fee beneficiary is set
+    if (transferUsd && feeBeneficiary == address(0)) {
+      revert FeeBeneficiaryNotSet(); // Can't withdraw fees in USDC until fee beneficiary is set
     }
     feeWithdrawnTimestamp = block.timestamp;
     uint256 usdAmount = (fundAmount * aum) / totalSupply();
     _burn(address(this), fundAmount);
     aum -= usdAmount;
-    _transferUsdFromCustodian(feeBeneficiary, usdAmount);
+    if (transferUsd) {
+      _transferUsdFromCustodian(feeBeneficiary, usdAmount);
+    }
     emit FeesWithdrawn(feeBeneficiary, fundAmount, usdAmount);
     emit NavUpdated(aum, totalSupply(), '');
   }
