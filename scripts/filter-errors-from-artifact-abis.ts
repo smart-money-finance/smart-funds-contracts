@@ -1,5 +1,5 @@
-const { readdir, readFile, writeFile } = require('fs/promises');
-const { join } = require('path');
+import { readdir, readFile, writeFile } from 'fs/promises';
+import { join } from 'path';
 
 const contractsPath = join('.', 'artifacts', 'contracts');
 readdir(contractsPath, { withFileTypes: true }).then((folders) => {
@@ -10,7 +10,7 @@ readdir(contractsPath, { withFileTypes: true }).then((folders) => {
         for (const file of files) {
           if (file.isFile()) {
             readFile(join(contractPath, file.name)).then((artifactBuffer) => {
-              const artifact = JSON.parse(artifactBuffer);
+              const artifact = JSON.parse(artifactBuffer.toString());
               const abi = artifact?.abi;
               if (Array.isArray(abi)) {
                 const newAbi = abi.filter((val) => val?.type !== 'error');

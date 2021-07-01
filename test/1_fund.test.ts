@@ -215,6 +215,32 @@ describe('Fund', () => {
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(usdAmount);
   });
 
+  step('Should manually redeem', async () => {
+    await fund.addManualRedemption(0, true);
+    expect(await fund.activeAndPendingInvestmentCount()).to.eq(1);
+    expect(await fund.activeInvestmentCount()).to.eq(1);
+  });
+
+  step('Should add investment request', async () => {
+    const amountToInvest = ethers.utils.parseUnits('10000', 6);
+    await fund
+      .connect(wallets[2])
+      .requestInvestment(
+        amountToInvest,
+        '1',
+        ethers.constants.MaxUint256,
+        ethers.constants.MaxUint256,
+        ethers.constants.MaxUint256,
+      );
+    expect(await fund.activeAndPendingInvestmentCount()).to.eq(2);
+    expect(await fund.activeInvestmentCount()).to.eq(1);
+  });
+
+  step('Should manual redeem and fail', async () => {
+    await expect(fund.addManualRedemption(1, true)).to.be.revertedWith(
+      'OpenRequestsPreventClosing',
+    );
+  });
   // step('Should increase time and process fees', async () => {
   //   expect(await usdToken.balanceOf(fund.address)).to.eq(0);
   //   await usdToken.approve(fund.address, ethers.constants.MaxUint256);
