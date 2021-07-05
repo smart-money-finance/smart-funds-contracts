@@ -543,7 +543,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     onlyManager
   {
     if (!whitelist[investor].whitelisted) {
-      revert NotInvestor(); // Investor isn't whitelisted
+      // revert NotInvestor(); // Investor isn't whitelisted
+      _addToWhitelist(investor, '');
     }
     uint256 investmentId = investments.length;
     uint256 fundAmount;
