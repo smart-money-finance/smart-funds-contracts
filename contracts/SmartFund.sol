@@ -44,6 +44,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 initialFundAmount;
     uint256 initialBaseAmount;
     uint256 initialHighWaterPrice;
+    bool usdTransferred;
     uint256 timestamp;
     uint256 redeemedTimestamp; // 0 if not redeemed
     bool redemptionUsdTransferred;
@@ -60,6 +61,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 maxFundAmount;
     uint256 deadline;
     uint256 timestamp;
+    uint256 nonce;
   }
   mapping(address => InvestmentRequest) public investmentRequests; // investor address to investment request
 
@@ -67,6 +69,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 minUsdAmount;
     uint256 deadline;
     uint256 timestamp;
+    uint256 nonce;
   }
   mapping(uint256 => RedemptionRequest) public redemptionRequests; // investment id to redemption request
 
@@ -78,7 +81,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     uint256 usdAmount,
     uint256 minFundAmount,
     uint256 maxFundAmount,
-    uint256 deadline
+    uint256 deadline,
+    uint256 nonce
   );
   event Invested(
     address indexed investor,
@@ -90,7 +94,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     address indexed investor,
     uint256 indexed investmentId,
     uint256 minUsdAmount,
-    uint256 deadline
+    uint256 deadline,
+    uint256 nonce
   );
   event Redeemed(
     address indexed investor,
@@ -142,6 +147,8 @@ contract SmartFund is Initializable, FeeDividendToken {
   error PriceOutsideTolerance();
   error NoExistingRequest();
   error RequestAlreadyCreated();
+  error NonceMismatch();
+  error InvestorsNoncesLengthMismatch();
 
   function initialize(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
@@ -242,11 +249,15 @@ contract SmartFund is Initializable, FeeDividendToken {
   function updateAumAndProcessInvestments(
     uint256 _aum,
     string calldata ipfsHash,
-    address[] calldata investors
+    address[] calldata investors,
+    uint256[] calldata currentNonces
   ) public notClosed onlyAumUpdater {
+    if (investors.length != currentNonces.length) {
+      revert InvestorsNoncesLengthMismatch();
+    }
     updateAum(_aum, ipfsHash);
     for (uint256 i = 0; i < investors.length; i++) {
-      processInvestmentRequest(investors[i]);
+      processInvestmentRequest(investors[i], currentNonces[i]);
     }
   }
 
@@ -294,44 +305,21 @@ contract SmartFund is Initializable, FeeDividendToken {
     }
   }
 
-  // Having 2 separate functions for creating and updating a request prevents a race condition:
+  // Nonce prevents a race condition:
   // Investor sends out tx to update an existing request
   // Manager sends out tx to process request, accidentally frontruns, tx mines first
   // Investor's tx mines and now he has a second investment request opened that he didn't intend
-  // Similar to the standard ERC20 race condition
-  // This is not needed for redemption requests because once an investment is redeemed, it's done
-  function createInvestmentRequest(
-    uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 maxFundAmount,
-    uint256 deadline
-  ) public notClosed onlyUsingUsdToken onlyWhitelisted {
-    if (investmentRequests[msg.sender].timestamp != 0) {
-      revert RequestAlreadyCreated();
-    }
-    _addInvestmentRequest(usdAmount, minFundAmount, maxFundAmount, deadline);
-  }
-
+  // It also prevents the manager from processing a request that has been updated since he sent the tx
   function updateInvestmentRequest(
     uint256 usdAmount,
     uint256 minFundAmount,
     uint256 maxFundAmount,
-    uint256 deadline
+    uint256 deadline,
+    uint256 currentNonce
   ) public notClosed onlyUsingUsdToken onlyWhitelisted {
-    // this check ensures that it won't unintentionally create a new request
-    // if it mines after a fund manager processes an existing one
-    if (investmentRequests[msg.sender].timestamp == 0) {
-      revert NoExistingRequest();
+    if (investmentRequests[msg.sender].nonce != currentNonce) {
+      revert NonceMismatch();
     }
-    _addInvestmentRequest(usdAmount, minFundAmount, maxFundAmount, deadline);
-  }
-
-  function _addInvestmentRequest(
-    uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 maxFundAmount,
-    uint256 deadline
-  ) internal {
     if (
       activeInvestmentCountPerInvestor[msg.sender] >= maxInvestmentsPerInvestor
     ) {
@@ -352,20 +340,25 @@ contract SmartFund is Initializable, FeeDividendToken {
     // check usd balance and allowance
     _verifyUsdAllowance(msg.sender, usdAmount);
     // save some gas?
-    delete investmentRequests[msg.sender];
+    if (investmentRequests[msg.sender].timestamp != 0) {
+      delete investmentRequests[msg.sender];
+    }
+    uint256 newNonce = currentNonce + 1;
     investmentRequests[msg.sender] = InvestmentRequest({
       usdAmount: usdAmount,
       minFundAmount: minFundAmount,
       maxFundAmount: maxFundAmount,
       timestamp: block.timestamp,
-      deadline: deadline
+      deadline: deadline,
+      nonce: newNonce
     });
     emit InvestmentRequestUpdated(
       msg.sender,
       usdAmount,
       minFundAmount,
       maxFundAmount,
-      deadline
+      deadline,
+      newNonce
     );
   }
 
@@ -379,19 +372,23 @@ contract SmartFund is Initializable, FeeDividendToken {
       revert NoExistingRequest();
     }
     delete investmentRequests[msg.sender];
-    emit InvestmentRequestUpdated(msg.sender, 0, 0, 0, 0);
+    emit InvestmentRequestUpdated(msg.sender, 0, 0, 0, 0, 0);
   }
 
   function _addInvestment(
     address investor,
     uint256 usdAmount,
     uint256 fundAmount,
+    bool transferUsd,
     InvestmentRequest memory investmentRequest
   ) internal {
     if (
       activeInvestmentCountPerInvestor[investor] >= maxInvestmentsPerInvestor
     ) {
       revert MaxInvestmentsReached(); // Investor has reached max investment limit
+    }
+    if (transferUsd) {
+      factory.usdTransferFrom(investor, manager, usdAmount);
     }
     aum += usdAmount;
     capitalContributed += usdAmount;
@@ -404,6 +401,7 @@ contract SmartFund is Initializable, FeeDividendToken {
         initialFundAmount: fundAmount,
         initialBaseAmount: toBase(fundAmount),
         initialHighWaterPrice: highWaterPrice,
+        usdTransferred: transferUsd,
         timestamp: block.timestamp,
         redeemedTimestamp: 0,
         redemptionUsdTransferred: false
@@ -415,7 +413,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     emit NavUpdated(aum, totalSupply(), '');
   }
 
-  function processInvestmentRequest(address investor)
+  function processInvestmentRequest(address investor, uint256 currentNonce)
     public
     notClosed
     onlyUsingUsdToken
@@ -425,6 +423,9 @@ contract SmartFund is Initializable, FeeDividendToken {
       revert NotInvestor();
     }
     InvestmentRequest storage investmentRequest = investmentRequests[investor];
+    if (investmentRequest.nonce != currentNonce) {
+      revert NonceMismatch();
+    }
     if (investmentRequest.timestamp == 0) {
       revert NoExistingRequest();
     }
@@ -446,15 +447,15 @@ contract SmartFund is Initializable, FeeDividendToken {
     ) {
       revert PriceOutsideTolerance();
     }
-    usdToken.transferFrom(investor, manager, investmentRequest.usdAmount);
     _addInvestment(
       investor,
       investmentRequest.usdAmount,
       fundAmount,
+      true,
       investmentRequest
     );
     delete investmentRequests[investor];
-    emit InvestmentRequestUpdated(investor, 0, 0, 0, 0);
+    emit InvestmentRequestUpdated(investor, 0, 0, 0, 0, 0);
   }
 
   function addManualInvestment(address investor, uint256 usdAmount)
@@ -476,12 +477,14 @@ contract SmartFund is Initializable, FeeDividendToken {
       investor,
       usdAmount,
       fundAmount,
+      false,
       InvestmentRequest({
         usdAmount: 0,
         minFundAmount: 0,
         maxFundAmount: 0,
         timestamp: 0,
-        deadline: 0
+        deadline: 0,
+        nonce: 0
       })
     );
   }
@@ -489,7 +492,8 @@ contract SmartFund is Initializable, FeeDividendToken {
   function updateRedemptionRequest(
     uint256 investmentId,
     uint256 minUsdAmount,
-    uint256 deadline
+    uint256 deadline,
+    uint256 currentNonce
   ) public onlyUsingUsdToken onlyWhitelisted {
     Investment storage investment = investments[investmentId];
     if (investment.investor != msg.sender) {
@@ -501,6 +505,9 @@ contract SmartFund is Initializable, FeeDividendToken {
     if (investment.timestamp + timelock > block.timestamp) {
       revert InvestmentLockedUp();
     }
+    if (redemptionRequests[investmentId].nonce != currentNonce) {
+      revert NonceMismatch();
+    }
     if (minUsdAmount < 1) {
       revert MinAmountZero();
     }
@@ -508,16 +515,19 @@ contract SmartFund is Initializable, FeeDividendToken {
       revert AfterDeadline();
     }
     delete redemptionRequests[investmentId];
+    uint256 newNonce = currentNonce + 1;
     redemptionRequests[investmentId] = RedemptionRequest({
       minUsdAmount: minUsdAmount,
       deadline: deadline,
-      timestamp: block.timestamp
+      timestamp: block.timestamp,
+      nonce: newNonce
     });
     emit RedemptionRequestUpdated(
       msg.sender,
       investmentId,
       minUsdAmount,
-      deadline
+      deadline,
+      newNonce
     );
   }
 
@@ -533,8 +543,11 @@ contract SmartFund is Initializable, FeeDividendToken {
     if (investment.redeemedTimestamp != 0) {
       revert InvestmentRedeemed();
     }
+    if (redemptionRequests[investmentId].timestamp == 0) {
+      revert NoExistingRequest();
+    }
     delete redemptionRequests[investmentId];
-    emit RedemptionRequestUpdated(msg.sender, investmentId, 0, 0);
+    emit RedemptionRequestUpdated(msg.sender, investmentId, 0, 0, 0);
   }
 
   function _redeem(
@@ -580,17 +593,20 @@ contract SmartFund is Initializable, FeeDividendToken {
     }
   }
 
-  function processRedemptionRequest(uint256 investmentId)
+  function processRedemptionRequest(uint256 investmentId, uint256 currentNonce)
     public
     onlyUsingUsdToken
     onlyManager
   {
-    RedemptionRequest storage redemptionRequest = redemptionRequests[
-      investmentId
-    ];
     Investment storage investment = investments[investmentId];
     if (investment.redeemedTimestamp != 0) {
       revert InvestmentRedeemed();
+    }
+    RedemptionRequest storage redemptionRequest = redemptionRequests[
+      investmentId
+    ];
+    if (redemptionRequest.nonce != currentNonce) {
+      revert NonceMismatch();
     }
     if (redemptionRequest.timestamp == 0) {
       revert NoExistingRequest();
@@ -628,7 +644,7 @@ contract SmartFund is Initializable, FeeDividendToken {
       totalSupply();
     if (redemptionRequests[investmentId].timestamp != 0) {
       delete redemptionRequests[investmentId];
-      emit RedemptionRequestUpdated(investment.investor, investmentId, 0, 0);
+      emit RedemptionRequestUpdated(investment.investor, investmentId, 0, 0, 0);
     }
     _redeem(
       investmentId,
