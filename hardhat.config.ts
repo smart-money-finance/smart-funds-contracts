@@ -16,6 +16,11 @@ const config: HardhatUserConfig = {
       url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
     },
+    polygon: {
+      url: `https://rpc-mainnet.maticvigil.com/`,
+      chainId: 137,
+      accounts: { mnemonic: process.env.MNEMONIC },
+    },
   },
   solidity: {
     version: '0.8.4',
