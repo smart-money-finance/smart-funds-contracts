@@ -34,5 +34,6 @@
   "InvestorsNoncesLengthMismatch": "Array parameters investors and nonces have different lengths",
   "InsufficientUsd": "Not enough usd tokens",
   "InsufficientUsdApproved": "Not enough usd tokens approved to the fund contract",
-  "PermitValueMismatch": "Signed usd token permit too small"
+  "PermitValueMismatch": "Signed usd token permit too small",
+  "InvalidInvestmentId": "Invalid investment id"
 }
