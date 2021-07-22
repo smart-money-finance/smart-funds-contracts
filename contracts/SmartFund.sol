@@ -822,7 +822,6 @@ contract SmartFund is Initializable, FeeDividendToken {
   function unpaidFees(uint256 investmentId)
     public
     view
-    onlyValidInvestmentId(investmentId)
     returns (uint256 managementFeeFundAmount, uint256 performanceFeeFundAmount)
   {
     managementFeeFundAmount = _calculateManagementFee(
