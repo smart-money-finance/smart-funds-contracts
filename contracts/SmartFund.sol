@@ -263,7 +263,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     string calldata ipfsHash,
     address[] calldata investors,
     uint256[] calldata currentNonces
-  ) public notClosed onlyAumUpdater {
+  ) public {
     if (investors.length != currentNonces.length) {
       revert InvestorsNoncesLengthMismatch();
     }
