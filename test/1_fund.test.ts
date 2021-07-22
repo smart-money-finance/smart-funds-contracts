@@ -1,10 +1,60 @@
 import { describe, before } from 'mocha';
 import { expect, use } from 'chai';
-import { ethers } from 'hardhat';
-import { Contract, Event } from 'ethers';
+import { ethers, network } from 'hardhat';
+import { BigNumberish, Contract, Event, Signature } from 'ethers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 import { step } from 'mocha-steps';
 import { solidity } from 'ethereum-waffle';
+
+async function signPermit(
+  wallet: SignerWithAddress,
+  token: Contract,
+  chainId: BigNumberish,
+  spender: string,
+  value: BigNumberish,
+  deadline: BigNumberish,
+): Promise<Signature> {
+  const rawSignature = await wallet._signTypedData(
+    {
+      name: await token.name(), // token.name()
+      version: await token.version(), // token.version()
+      chainId, // chainId
+      verifyingContract: token.address, // token.address
+    },
+    {
+      Permit: [
+        {
+          name: 'owner',
+          type: 'address',
+        },
+        {
+          name: 'spender',
+          type: 'address',
+        },
+        {
+          name: 'value',
+          type: 'uint256',
+        },
+        {
+          name: 'nonce',
+          type: 'uint256',
+        },
+        {
+          name: 'deadline',
+          type: 'uint256',
+        },
+      ],
+    },
+    {
+      owner: wallet.address, // from
+      spender, // fund.address
+      value, // amount
+      nonce: await token.nonces(wallet.address), // token.nonces(from)
+      deadline,
+    },
+  );
+  return ethers.utils.splitSignature(rawSignature);
+}
 
 use(solidity);
 describe('Fund', () => {
@@ -101,9 +151,17 @@ describe('Fund', () => {
 
   step('Should request to invest client funds', async () => {
     const amountToInvest = ethers.utils.parseUnits('10000', 6);
-    await usdToken
-      .connect(wallets[2])
-      .approve(factory.address, ethers.constants.MaxUint256);
+    // await usdToken
+    //   .connect(wallets[2])
+    //   .approve(factory.address, ethers.constants.MaxUint256);
+    const signature = await signPermit(
+      wallets[2],
+      usdToken,
+      network.config.chainId || 1,
+      fund.address,
+      amountToInvest,
+      ethers.constants.MaxUint256,
+    );
     await fund
       .connect(wallets[2])
       .updateInvestmentRequest(
@@ -112,6 +170,9 @@ describe('Fund', () => {
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
         0,
+        signature.v,
+        signature.r,
+        signature.s,
       );
     const request = await fund.investmentRequests(wallets[2].address);
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;

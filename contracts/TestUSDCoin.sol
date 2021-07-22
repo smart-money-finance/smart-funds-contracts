@@ -2,10 +2,14 @@
 
 pragma solidity ^0.8.6;
 
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
-contract TestUSDCoin is ERC20 {
-  constructor() ERC20('USD Coin', 'USDC') {}
+contract TestUSDCoin is ERC20Permit {
+  constructor() ERC20Permit('USD Coin') ERC20('USD Coin', 'USDC') {}
+
+  function version() public pure returns (string memory) {
+    return '1';
+  }
 
   function decimals() public pure override returns (uint8) {
     return 6;
