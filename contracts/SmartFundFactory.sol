@@ -42,7 +42,7 @@ contract SmartFundFactory is Ownable {
     string memory logoUrl,
     string memory contactInfo,
     string memory tags,
-    bool useUsdToken
+    bool usingUsdToken
   ) public {
     if (managerToFund[msg.sender] != address(0)) {
       revert ManagerAlreadyHasFund(); // Manager already has a fund
@@ -59,7 +59,7 @@ contract SmartFundFactory is Ownable {
       logoUrl,
       contactInfo,
       tags,
-      useUsdToken,
+      usingUsdToken,
       msg.sender
     );
     address fundAddress = address(fund);

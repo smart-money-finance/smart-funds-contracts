@@ -26,7 +26,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   uint256 public maxInvestors;
   uint256 public maxInvestmentsPerInvestor;
   uint256 public minInvestmentAmount; // in usd token decimals
-  bool public useUsdToken; // enables requests, transfers usd on redemption and fee withdrawal
+  bool public usingUsdToken; // enables requests, transfers usd on redemption and fee withdrawal
 
   bool public closed; // set true after last investment redeems
   uint256 public aum;
@@ -163,7 +163,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     string memory _logoUrl,
     string memory _contactInfo,
     string memory _tags,
-    bool _useUsdToken,
+    bool _usingUsdToken,
     address _manager
   ) public initializer {
     _FeeDividendToken_init(name, symbol, 6);
@@ -185,7 +185,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
     tags = _tags;
-    useUsdToken = _useUsdToken;
+    usingUsdToken = _usingUsdToken;
     aumTimestamp = block.timestamp;
     feeWithdrawnTimestamp = block.timestamp;
     highWaterPrice = 1e16; // initial price of $0.01
@@ -222,7 +222,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   }
 
   modifier onlyUsingUsdToken() {
-    if (!useUsdToken) {
+    if (!usingUsdToken) {
       revert NotUsingUsdToken();
     }
     _;
@@ -624,7 +624,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     aum -= usdAmount;
     capitalContributed -= investment.initialUsdAmount;
     if (transferUsd) {
-      if (!useUsdToken) {
+      if (!usingUsdToken) {
         revert NotUsingUsdToken();
       }
       // transfer usd to investor
@@ -848,7 +848,7 @@ contract SmartFund is Initializable, FeeDividendToken {
     _burn(address(this), fundAmount);
     aum -= usdAmount;
     if (transferUsd) {
-      if (!useUsdToken) {
+      if (!usingUsdToken) {
         revert NotUsingUsdToken();
       }
       if (feeBeneficiary == address(0)) {
