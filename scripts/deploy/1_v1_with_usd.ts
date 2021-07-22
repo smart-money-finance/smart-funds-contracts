@@ -12,7 +12,7 @@ async function main() {
     usdToken.address,
     network.name !== 'mainnet', // whether to bypass global manager whitelist
   );
-  console.log(factory.address);
+  console.log({ factory: factory.address, usd: usdToken.address });
 }
 
 main()
