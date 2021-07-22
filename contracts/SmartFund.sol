@@ -89,7 +89,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     address indexed investor,
     uint256 indexed investmentId,
     uint256 usdAmount,
-    uint256 fundAmount
+    uint256 fundAmount,
+    uint256 investmentRequestNonce
   );
   event RedemptionRequestUpdated(
     address indexed investor,
@@ -433,7 +434,13 @@ contract SmartFund is Initializable, FeeDividendToken {
     );
     activeInvestmentCount++;
     activeInvestmentCountPerInvestor[investor]++;
-    emit Invested(investor, investments.length - 1, usdAmount, fundAmount);
+    emit Invested(
+      investor,
+      investments.length - 1,
+      usdAmount,
+      fundAmount,
+      investmentRequest.nonce
+    );
     emit NavUpdated(aum, totalSupply(), '');
   }
 
