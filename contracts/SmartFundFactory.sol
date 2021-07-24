@@ -3,14 +3,14 @@
 pragma solidity ^0.8.6;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 import '@openzeppelin/contracts/proxy/Clones.sol';
 
 import './SmartFund.sol';
 
 contract SmartFundFactory is Ownable {
   address internal masterFundLibrary;
-  ERC20 public usdToken;
+  ERC20Permit public usdToken;
   address[] public funds;
 
   mapping(address => bool) public managerWhitelist;
@@ -22,12 +22,11 @@ contract SmartFundFactory is Ownable {
 
   error ManagerAlreadyHasFund();
   error NotWhitelisted();
-  error SenderIsNotFund();
   error ManagerAlreadyWhitelisted();
 
   constructor(
     address _masterFundLibrary,
-    ERC20 _usdToken,
+    ERC20Permit _usdToken,
     bool _bypassWhitelist
   ) {
     masterFundLibrary = _masterFundLibrary;
@@ -43,7 +42,7 @@ contract SmartFundFactory is Ownable {
     string memory logoUrl,
     string memory contactInfo,
     string memory tags,
-    bool useUsdToken
+    bool usingUsdToken
   ) public {
     if (managerToFund[msg.sender] != address(0)) {
       revert ManagerAlreadyHasFund(); // Manager already has a fund
@@ -60,24 +59,13 @@ contract SmartFundFactory is Ownable {
       logoUrl,
       contactInfo,
       tags,
-      useUsdToken,
+      usingUsdToken,
       msg.sender
     );
     address fundAddress = address(fund);
     funds.push(fundAddress);
     managerToFund[msg.sender] = fundAddress;
     emit FundCreated(fundAddress);
-  }
-
-  function usdTransferFrom(
-    address from,
-    address to,
-    uint256 amount
-  ) public {
-    if (msg.sender != managerToFund[SmartFund(msg.sender).manager()]) {
-      revert SenderIsNotFund(); // Only callable by funds
-    }
-    usdToken.transferFrom(from, to, amount);
   }
 
   function whitelistMulti(address[] calldata managers) public onlyOwner {
