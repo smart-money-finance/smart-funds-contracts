@@ -74,7 +74,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   }
   mapping(uint256 => RedemptionRequest) public redemptionRequests; // investment id to redemption request
 
-  event NavUpdated(uint256 aum, uint256 totalSupply, string indexed ipfsHash);
+  event NavUpdated(uint256 aum, uint256 totalSupply, string ipfsHash);
   event Whitelisted(address indexed investor);
   event Blacklisted(address indexed investor);
   event InvestmentRequestUpdated(
