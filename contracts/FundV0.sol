@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.6;
+pragma solidity ^0.8.7;
 
 import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
 import './FeeDividendToken.sol';
-import './SmartFundFactory.sol';
+import './RegistryV0.sol';
 
-// import 'hardhat/console.sol';
+/*
+Upgrade notes:
+Use openzeppelin hardhat upgrades package
+Storage layout cannot change but can be added to at the end
+version function must return hardcoded incremented version
+*/
 
-contract SmartFund is Initializable, FeeDividendToken {
-  SmartFundFactory internal factory;
+contract FundV0 is Initializable, FeeDividendToken, UUPSUpgradeable {
+  RegistryV0 internal registry;
   ERC20Permit internal usdToken;
   address public manager;
   address public aumUpdater;
@@ -154,6 +160,7 @@ contract SmartFund is Initializable, FeeDividendToken {
   error InsufficientUsdApproved();
   error PermitValueMismatch();
   error InvalidInvestmentId();
+  error InvalidUpgrade();
 
   function initialize(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
@@ -167,8 +174,8 @@ contract SmartFund is Initializable, FeeDividendToken {
     address _manager
   ) public initializer {
     _FeeDividendToken_init(name, symbol, 6);
-    factory = SmartFundFactory(msg.sender);
-    usdToken = factory.usdToken();
+    registry = RegistryV0(msg.sender);
+    usdToken = registry.usdToken();
     manager = _manager;
     aumUpdater = addressParams[0];
     feeBeneficiary = addressParams[1];
@@ -191,6 +198,25 @@ contract SmartFund is Initializable, FeeDividendToken {
     highWaterPrice = 1e16; // initial price of $0.01
     highWaterPriceTimestamp = block.timestamp;
     emit NewHighWaterPrice(highWaterPrice);
+  }
+
+  function version() public pure returns (uint256) {
+    return 0;
+  }
+
+  function _authorizeUpgrade(address newFundImplementation)
+    internal
+    view
+    override
+    onlyManager
+  {
+    uint256 newVersion = FundV0(newFundImplementation).version();
+    if (
+      newVersion > registry.latestFundVersion() ||
+      address(registry.fundImplementations(newVersion)) != newFundImplementation
+    ) {
+      revert InvalidUpgrade();
+    }
   }
 
   modifier onlyManager() {

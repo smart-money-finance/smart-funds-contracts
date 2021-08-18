@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.6;
+pragma solidity ^0.8.7;
 
-// import 'hardhat/console.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 
-contract FeeDividendToken {
+contract FeeDividendToken is Initializable {
   string public name;
   string public symbol;
   uint8 public decimals;
@@ -41,7 +41,7 @@ contract FeeDividendToken {
     string memory _name,
     string memory _symbol,
     uint8 _decimals
-  ) internal {
+  ) internal initializer {
     name = _name;
     symbol = _symbol;
     decimals = _decimals;
