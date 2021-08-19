@@ -3,146 +3,19 @@
   "proxies": [
     {
       "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      "txHash": "0x700221ce8a9fe8199fdd3860e7d7c1e31fa879639f6944933d8f847c1b8e70de",
+      "txHash": "0x988e0cbe47c593662774f52dcd9605b6e9ce3a4384a7b7ed2fe00b6d0f988c8c",
       "kind": "uups"
     },
     {
       "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-      "txHash": "0x1c9342dd9f7b3d589c00cb619d10b23551e1f04b4bf8c3c928debe535d468e86",
+      "txHash": "0x64d65f73cdcfa1e15789350e77293cb92d38eb07f80f07a41bfa615f059369f3",
       "kind": "uups"
     }
   ],
   "impls": {
-    "556ca8594323c16fd361463749d77452d0bb850f1efeb791444b7df7c642c403": {
-      "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-      "txHash": "0xc6a8a152d0586124156a100e3160bde6bc27c1cf97e07f4f043e3c982d5e0b2c",
-      "layout": {
-        "storage": [
-          {
-            "contract": "Initializable",
-            "label": "_initialized",
-            "type": "t_bool",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
-          },
-          {
-            "contract": "Initializable",
-            "label": "_initializing",
-            "type": "t_bool",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
-          },
-          {
-            "contract": "ERC1967UpgradeUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
-          },
-          {
-            "contract": "UUPSUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:64"
-          },
-          {
-            "contract": "ContextUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
-          },
-          {
-            "contract": "OwnableUpgradeable",
-            "label": "_owner",
-            "type": "t_address",
-            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
-          },
-          {
-            "contract": "OwnableUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)49_storage",
-            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "usdToken",
-            "type": "t_contract(ERC20Permit)2286",
-            "src": "contracts/RegistryV0.sol:20"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "latestFundVersion",
-            "type": "t_uint256",
-            "src": "contracts/RegistryV0.sol:21"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "fundImplementations",
-            "type": "t_array(t_contract(FundV0)6582)dyn_storage",
-            "src": "contracts/RegistryV0.sol:22"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "funds",
-            "type": "t_array(t_address)dyn_storage",
-            "src": "contracts/RegistryV0.sol:23"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "managerWhitelist",
-            "type": "t_mapping(t_address,t_bool)",
-            "src": "contracts/RegistryV0.sol:25"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "bypassWhitelist",
-            "type": "t_bool",
-            "src": "contracts/RegistryV0.sol:26"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "managerToFund",
-            "type": "t_mapping(t_address,t_address)",
-            "src": "contracts/RegistryV0.sol:27"
-          }
-        ],
-        "types": {
-          "t_contract(ERC20Permit)2286": {
-            "label": "contract ERC20Permit"
-          },
-          "t_uint256": {
-            "label": "uint256"
-          },
-          "t_array(t_contract(FundV0)6582)dyn_storage": {
-            "label": "contract FundV0[]"
-          },
-          "t_contract(FundV0)6582": {
-            "label": "contract FundV0"
-          },
-          "t_array(t_address)dyn_storage": {
-            "label": "address[]"
-          },
-          "t_address": {
-            "label": "address"
-          },
-          "t_mapping(t_address,t_bool)": {
-            "label": "mapping(address => bool)"
-          },
-          "t_bool": {
-            "label": "bool"
-          },
-          "t_mapping(t_address,t_address)": {
-            "label": "mapping(address => address)"
-          },
-          "t_array(t_uint256)49_storage": {
-            "label": "uint256[49]"
-          },
-          "t_array(t_uint256)50_storage": {
-            "label": "uint256[50]"
-          }
-        }
-      }
-    },
     "44bc9ae539b69442c50a2d61356f64e84f36028c4a141ee4db80845ff1115139": {
       "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-      "txHash": "0x32455b64c330191dc44c912f67f88362d8966e3024d2f9276ba5e47a5160ffb9",
+      "txHash": "0x9d747b659f99dbad967ca9ed5bc9e1c0adfde07cbfd51b34a51fe010b4c03633",
       "layout": {
         "storage": [
           {
@@ -214,7 +87,7 @@
           {
             "contract": "FundV0",
             "label": "registry",
-            "type": "t_contract(RegistryV0)6888",
+            "type": "t_contract(RegistryV0)6897",
             "src": "contracts/FundV0.sol:20"
           },
           {
@@ -393,7 +266,7 @@
           }
         ],
         "types": {
-          "t_contract(RegistryV0)6888": {
+          "t_contract(RegistryV0)6897": {
             "label": "contract RegistryV0"
           },
           "t_contract(ERC20Permit)2286": {
@@ -529,6 +402,133 @@
           },
           "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
             "label": "mapping(address => mapping(address => uint256))"
+          }
+        }
+      }
+    },
+    "125027f87915c5219f73e5a89cb074bee0ec6ce254961707cf7c2617e45abfa4": {
+      "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+      "txHash": "0xd2b80a9d1314c2686878145787731ed82efb06694f52537c7f2d706e7f4396b1",
+      "layout": {
+        "storage": [
+          {
+            "contract": "Initializable",
+            "label": "_initialized",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
+          },
+          {
+            "contract": "Initializable",
+            "label": "_initializing",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
+          },
+          {
+            "contract": "ERC1967UpgradeUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
+          },
+          {
+            "contract": "UUPSUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:64"
+          },
+          {
+            "contract": "ContextUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "_owner",
+            "type": "t_address",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)49_storage",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "usdToken",
+            "type": "t_contract(ERC20Permit)2286",
+            "src": "contracts/RegistryV0.sol:20"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "latestFundVersion",
+            "type": "t_uint256",
+            "src": "contracts/RegistryV0.sol:21"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "fundImplementations",
+            "type": "t_array(t_contract(FundV0)6582)dyn_storage",
+            "src": "contracts/RegistryV0.sol:22"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "funds",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/RegistryV0.sol:23"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerWhitelist",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/RegistryV0.sol:25"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "bypassWhitelist",
+            "type": "t_bool",
+            "src": "contracts/RegistryV0.sol:26"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerToFund",
+            "type": "t_mapping(t_address,t_address)",
+            "src": "contracts/RegistryV0.sol:27"
+          }
+        ],
+        "types": {
+          "t_contract(ERC20Permit)2286": {
+            "label": "contract ERC20Permit"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_array(t_contract(FundV0)6582)dyn_storage": {
+            "label": "contract FundV0[]"
+          },
+          "t_contract(FundV0)6582": {
+            "label": "contract FundV0"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]"
           }
         }
       }

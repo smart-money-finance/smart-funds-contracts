@@ -86,18 +86,18 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
     }
     ERC1967Proxy fundProxy = new ERC1967Proxy(
       address(fundImplementations[latestFundVersion]),
-      abi.encodeWithSignature(
-        'initialize(address[2],uint256[7],string,string,string,string,string,bool,address)',
-        addressParams,
-        uintParams,
-        name,
-        symbol,
-        logoUrl,
-        contactInfo,
-        tags,
-        usingUsdToken,
-        msg.sender
-      )
+      bytes('')
+    );
+    FundV0(address(fundProxy)).initialize(
+      addressParams,
+      uintParams,
+      name,
+      symbol,
+      logoUrl,
+      contactInfo,
+      tags,
+      usingUsdToken,
+      msg.sender
     );
     address fundAddress = address(fundProxy);
     funds.push(fundAddress);
