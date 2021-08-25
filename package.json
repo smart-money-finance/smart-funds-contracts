@@ -5,6 +5,8 @@
   "scripts": {
     "test": "hardhat test",
     "deploy-rinkeby": "hardhat --network rinkeby run scripts/deploy/1_v1.ts",
+    "deploy-mumbai": "hardhat --network mumbai run scripts/deploy/1_v1.ts",
+    "deploy-polygon": "hardhat --network polygon run scripts/deploy/1_v1.ts",
     "filter-abis": "ts-node scripts/filter-errors-from-artifact-abis.ts"
   },
   "devDependencies": {
@@ -22,8 +24,8 @@
     "chai": "^4.3.4",
     "dotenv": "^10.0.0",
     "ethereum-waffle": "^3.4.0",
-    "ethers": "^5.4.4",
-    "hardhat": "^2.6.0",
+    "ethers": "^5.4.5",
+    "hardhat": "^2.6.1",
     "mocha-steps": "^1.3.0",
     "ts-node": "^10.2.0",
     "typechain": "^5.1.2",

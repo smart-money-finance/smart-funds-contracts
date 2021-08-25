@@ -8,6 +8,7 @@ async function main() {
     goerli: '0xde637d4c445ca2aae8f782ffac8d2971b93a4998',
     mainnet: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     polygon: '0x2791bca1f2de4661ed88a30c99a7a9449aa84174',
+    mumbai: '0x3B83F6b38612e0E3357Dc9657f01689dD1e8DADf',
   }[network.name];
 
   const bypassWhitelist = network.name !== 'mainnet';

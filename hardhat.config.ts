@@ -19,12 +19,16 @@ const config: HardhatUserConfig = {
       accounts: { mnemonic: process.env.MNEMONIC },
     },
     mumbai: {
-      url: 'https://rpc-mumbai.maticvigil.com',
+      chainId: 80001,
+      url: `https://polygon-mumbai.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
+      gasPrice: 8000000000, // TODO: change this every deploy
     },
     polygon: {
-      url: 'https://rpc-mainnet.maticvigil.com',
+      chainId: 137,
+      url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
+      gasPrice: 8000000000, // TODO: change this every deploy
     },
   },
   solidity: {
