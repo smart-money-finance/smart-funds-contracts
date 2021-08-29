@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import '@nomiclabs/hardhat-waffle';
 import '@typechain/hardhat';
+import '@openzeppelin/hardhat-upgrades';
 import { HardhatUserConfig } from 'hardhat/config';
 
 const config: HardhatUserConfig = {
@@ -19,7 +20,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: '0.8.6',
+    version: '0.8.7',
     settings: { optimizer: { enabled: true, runs: 200 } },
   },
 };

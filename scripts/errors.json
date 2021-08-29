@@ -2,6 +2,7 @@
   "ManagerAlreadyHasFund": "Manager already has a fund",
   "NotWhitelisted": "Not whitelisted as a fund manager",
   "ManagerAlreadyWhitelisted": "Manager is already whitelisted",
+  "VersionMismatch": "Fund implementation version incorrect",
   "InvalidFeeBeneficiary": "Invalid fee beneficiary",
   "InvalidMaxInvestors": "Invalid max investors amount",
   "ManagerOnly": "Manager only",
@@ -35,5 +36,6 @@
   "InsufficientUsd": "Not enough usd tokens",
   "InsufficientUsdApproved": "Not enough usd tokens approved to the fund contract",
   "PermitValueMismatch": "Signed usd token permit too small",
-  "InvalidInvestmentId": "Invalid investment id"
+  "InvalidInvestmentId": "Invalid investment id",
+  "InvalidUpgrade": "Upgrade contract is invalid"
 }

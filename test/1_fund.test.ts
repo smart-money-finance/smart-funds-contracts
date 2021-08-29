@@ -1,11 +1,18 @@
 import { describe, before } from 'mocha';
 import { expect, use } from 'chai';
-import { ethers, network } from 'hardhat';
+import { ethers, network, upgrades } from 'hardhat';
 import { BigNumberish, Event, Signature } from 'ethers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 import { step } from 'mocha-steps';
 import { solidity } from 'ethereum-waffle';
-import { TestUSDCoin, SmartFundFactory, SmartFund } from '../typechain';
+import {
+  TestUSDCoin__factory,
+  TestUSDCoin,
+  RegistryV0__factory,
+  RegistryV0,
+  FundV0__factory,
+  FundV0,
+} from '../typechain';
 
 async function signPermit(
   wallet: SignerWithAddress,
@@ -60,29 +67,53 @@ async function signPermit(
 use(solidity);
 describe('Fund', () => {
   let usdToken: TestUSDCoin;
-  let factory: SmartFundFactory;
-  let fund: SmartFund;
+  let registry: RegistryV0;
+  let fund: FundV0;
   let owner: SignerWithAddress;
   let wallets: SignerWithAddress[];
 
   before(async () => {
-    const UsdToken = await ethers.getContractFactory('TestUSDCoin');
-    const usdTokenContract = await UsdToken.deploy();
-    usdToken = (await usdTokenContract.deployed()) as TestUSDCoin;
-
-    const SmartFund = await ethers.getContractFactory('SmartFund');
-    const masterFundLibrary = await SmartFund.deploy();
-
-    const Factory = await ethers.getContractFactory('SmartFundFactory');
-    const factoryContract = await Factory.deploy(
-      masterFundLibrary.address,
-      usdToken.address,
-      true,
-    );
-    factory = (await factoryContract.deployed()) as SmartFundFactory;
-
     wallets = await ethers.getSigners();
     owner = wallets[0];
+
+    const UsdToken = await ethers.getContractFactory('TestUSDCoin');
+    const usdTokenContract = await UsdToken.deploy();
+    await usdTokenContract.deployed();
+    usdToken = TestUSDCoin__factory.connect(usdTokenContract.address, owner);
+
+    const FundFactory = await ethers.getContractFactory('FundV0');
+    const fundProxy = await upgrades.deployProxy(FundFactory, {
+      kind: 'uups',
+      initializer: false,
+    });
+    await fundProxy.deployed();
+    // storage slot of implementation is
+    // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))
+    // see EIP-1967
+    const fundImplementationHex = await ethers.provider.getStorageAt(
+      fundProxy.address,
+      ethers.utils.hexValue(
+        ethers.BigNumber.from(
+          ethers.utils.keccak256(
+            ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
+          ),
+        ).sub(1),
+      ),
+    );
+    const fundImplementationAddress = ethers.utils.hexStripZeros(
+      fundImplementationHex,
+    );
+
+    const RegistryFactory = await ethers.getContractFactory('RegistryV0');
+    const Registry = await upgrades.deployProxy(
+      RegistryFactory,
+      [fundImplementationAddress, usdToken.address, false],
+      {
+        kind: 'uups',
+      },
+    );
+    await Registry.deployed();
+    registry = RegistryV0__factory.connect(Registry.address, owner);
 
     // initialize wallets with usdc
     await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100000', 6));
@@ -98,11 +129,11 @@ describe('Fund', () => {
   });
 
   step('Should whitelist fund manager', async () => {
-    await factory.whitelistMulti([owner.address]);
+    await registry.whitelistMulti([owner.address]);
   });
 
   step('Should create fund', async () => {
-    const tx = await factory.newFund(
+    const tx = await registry.newFund(
       [owner.address, wallets[5].address],
       [1, 200, 2000, 20, 5, 1, 1],
       'Bobs cool fund',
@@ -116,7 +147,8 @@ describe('Fund', () => {
     const fundAddress = txResp.events?.find(
       (event: Event) => event.event === 'FundCreated',
     )?.args?.fund;
-    fund = (await ethers.getContractAt('SmartFund', fundAddress)) as SmartFund;
+    fund = FundV0__factory.connect(fundAddress, owner);
+    // fund = (await ethers.getContractAt('SmartFund', fundAddress)) as SmartFund;
     const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
     expect(await fund.aum()).to.eq(0);
     expect(await fund.highWaterPrice()).to.eq(initialPrice);
@@ -418,7 +450,7 @@ describe('Fund', () => {
             signature.r,
             signature.s,
           ),
-      ).to.be.revertedWith('FundClosed');
+      ).to.be.reverted;
     },
   );
 
