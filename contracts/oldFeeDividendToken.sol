@@ -4,7 +4,7 @@ pragma solidity ^0.8.7;
 
 import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 
-contract FeeDividendToken is Initializable {
+contract oldFeeDividendToken is Initializable {
   string public name;
   string public symbol;
   uint8 public decimals;

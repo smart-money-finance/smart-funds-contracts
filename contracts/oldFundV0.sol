@@ -2,12 +2,12 @@
 
 pragma solidity ^0.8.7;
 
-import { Initializable } from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
-import { UUPSUpgradeable } from '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-import { ERC20VotesUpgradeable, ERC20Upgradeable } from '@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol';
-import { ERC20Permit } from '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
+import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
-import { RegistryV0 } from './RegistryV0.sol';
+import './oldFeeDividendToken.sol';
+import './RegistryV0.sol';
 
 /*
 Upgrade notes:
@@ -16,218 +16,115 @@ Storage layout cannot change but can be added to at the end
 version function must return hardcoded incremented version
 */
 
-contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
-  RegistryV0 public registry;
-  ERC20Permit public usdToken;
-
-  // set during onboarding
+contract oldFundV0 is Initializable, oldFeeDividendToken, UUPSUpgradeable {
+  RegistryV0 internal registry;
+  ERC20Permit internal usdToken;
   address public manager;
-  address public custodian; // holds fund's assets
-  address public aumUpdater; // can update fund's aum
-  address public feeBeneficiary; // usd is sent to this address on fee withdrawal
-  uint256 public timelock; // how long in seconds that investments are locked up
-  uint256 public feeTimelock; // how long in seconds the manager has to wait between processing fees
+  address public aumUpdater;
+  address public feeBeneficiary;
+  uint256 public timelock;
   uint256 public managementFee; // basis points per year
   uint256 public performanceFee; // basis points
-  uint256 public maxInvestors;
-  uint256 public maxInvestmentsPerInvestor;
-  uint256 public minInvestmentAmount; // in usd token decimals
-  uint256 public initialPrice; // starting token price in (usd / token) * 1e6
+  uint256 public feeTimelock;
   string public logoUrl;
   string public contactInfo;
   string public tags;
-  bool public usingUsdToken; // enables requests, allows transferring usd on redemption and fee withdrawal
+  uint256 public maxInvestors;
+  uint256 public maxInvestmentsPerInvestor;
+  uint256 public minInvestmentAmount; // in usd token decimals
+  bool public usingUsdToken; // enables requests, transfers usd on redemption and fee withdrawal
 
-  struct Nav {
-    uint256 aum;
-    uint256 supply;
-    uint256 totalCapitalContributed; // amount contributed, adds by cost basis when investment happens, subtracts by cost basis when a redemption happens
-    uint256 timestamp; // block timestamp
-    string ipfsHash; // points to asset tracking json blob or blank
-  }
-  Nav[] public navs; // append only, existing data is never modified. pushed every time aum or supply changes, can be multiple times per block so timestamps can show up more than once
-  event NavUpdated(
-    uint256 navId,
-    uint256 aum,
-    uint256 supply,
-    uint256 totalCapitalContributed,
-    string ipfsHash
-  );
+  bool public closed; // set true after last investment redeems
+  uint256 public aum;
+  uint256 public aumTimestamp; // block timestamp of last aum update
+  uint256 public highWaterPrice; // highest ((aum * 10^18) / supply)
+  uint256 public highWaterPriceTimestamp; // timestamp of highest price
+  uint256 public feeWithdrawnTimestamp;
+  uint256 public capitalContributed;
 
-  struct Investor {
-    bool whitelisted; // allowed to invest or not
-    uint256 investorId; // index in investors array
-    uint256 activeInvestmentCount; // number of open investments to enforce maximum
-    uint256 investmentRequestId; // id of open investment request, or max uint if none
-    uint256[] investmentIds; // all investment ids, open or not
-  }
-  mapping(address => Investor) public investorInfo;
-  address[] public investors; // append only list of investors, added to when whitelisted unless that investor has an investorId that matches, which means they were whitelisted and then blacklisted and they're already in this array
-  uint256 public investorCount; // count of currently whitelisted investors, for maintaining max limit
-  event Whitelisted(address indexed investor);
-  event Blacklisted(address indexed investor);
+  mapping(address => bool) public whitelist;
 
   struct Investment {
-    // constants
-    address investor; // if this is the fund contract itself, the investment is from the fund manager and is not subject to lockup
-    uint256 timestamp; // timestamp of investment or when imported
-    uint256 lockupTimestamp; // timestamp of investment or original investment if imported, for comparing to timelock
-    uint256 initialUsdAmount; // dollar value at time of investment
-    uint256 initialFundAmount; // tokens minted at time of investment
-    uint256 initialHighWaterMark; // same as initialUsdAmount unless imported
-    uint256 managementFeeCostBasis; // dollar value used for calculating management fees. same as initialUsdAmount unless imported
-    uint256 investmentRequestId; // id of the request that started it, or max uint if it's a manual investment
-    uint256 navId; // nav id right before investment processed
-    bool usdTransferred; // whether usd was transferred through the fund contract at time of investment
-    bool imported; // whether investment was imported from a previous fund
-    // fee related variables
-    uint256 remainingFundAmount; // tokens remaining after past fee sweeps
-    uint256 usdManagementFeesSwept; // total usd paid for management fees
-    uint256 usdPerformanceFeesSwept; // total usd paid for performance fees
-    uint256 fundManagementFeesSwept; // total fund tokens paid for management fees, can differ wildly from above because of price changes
-    uint256 fundPerformanceFeesSwept; // total fund tokens paid for performance fees
-    uint256 highWaterMark; // cannot charge performance fee unless investment value is higher than this at time of fee processing, pull out management fees before comparing
-    uint256[] feeSweepIds; // ids of all fee sweeps that have occurred on this investment, use latest one to get timestamp of latest sweep
-    uint256 feeSweepsCount; // number of fee sweeps that have occurred, equal to length of feeSweepIds
-    // redemption related variables
-    uint256 redemptionRequestId; // id of current redemption request or max uint if no request
-    uint256 redemptionId; // id of redemption if redeemed, otherwise max uint
-    bool redeemed;
+    InvestmentRequest investmentRequest; // default 0 values if it's a manual investment
+    address investor;
+    uint256 initialUsdAmount;
+    uint256 initialFundAmount;
+    uint256 initialBaseAmount;
+    uint256 initialHighWaterPrice;
+    bool usdTransferred;
+    uint256 timestamp;
+    uint256 redeemedTimestamp; // 0 if not redeemed
+    bool redemptionUsdTransferred;
   }
   Investment[] public investments;
-  uint256 public activeInvestmentCount; // number of open investments
-  bool public doneImportingInvestments; // set true after the first manual aum update or non-imported investment
+
+  uint256 public investorCount;
+  mapping(address => uint256) public activeInvestmentCountPerInvestor;
+  uint256 public activeInvestmentCount;
+
+  struct InvestmentRequest {
+    uint256 usdAmount;
+    uint256 minFundAmount;
+    uint256 maxFundAmount;
+    uint256 deadline;
+    uint256 timestamp;
+    uint256 nonce;
+  }
+  mapping(address => InvestmentRequest) public investmentRequests; // investor address to investment request
+
+  struct RedemptionRequest {
+    uint256 minUsdAmount;
+    uint256 deadline;
+    uint256 timestamp;
+    uint256 nonce;
+  }
+  mapping(uint256 => RedemptionRequest) public redemptionRequests; // investment id to redemption request
+
+  event NavUpdated(uint256 aum, uint256 totalSupply, string ipfsHash);
+  event Whitelisted(address indexed investor);
+  event Blacklisted(address indexed investor);
+  event InvestmentRequestUpdated(
+    address indexed investor,
+    uint256 usdAmount,
+    uint256 minFundAmount,
+    uint256 maxFundAmount,
+    uint256 deadline,
+    uint256 nonce
+  );
   event Invested(
     address indexed investor,
     uint256 indexed investmentId,
-    uint256 indexed investmentRequestId,
     uint256 usdAmount,
     uint256 fundAmount,
-    bool imported,
-    uint256 initialHighWaterMark,
-    uint256 managementFeeCostBasis
+    uint256 investmentRequestNonce
   );
-
-  struct FeeSweep {
-    address investor;
-    uint256 investmentId;
-    uint256 navId; // nav id right before sweep
-    uint256 highWaterMark; // new high water mark
-    uint256 usdManagementFee; // usd for management fee
-    uint256 usdPerformanceFee; // usd for performance fee
-    uint256 fundManagementFee; // fund tokens pulled out corresponding to above usd fee
-    uint256 fundPerformanceFee; // fund tokens pulled out to match above
-    uint256 timestamp;
-  }
-  FeeSweep[] public feeSweeps; // append only, existing data is never modified
-  uint256 public lastFeeSweepEndedTimestamp; // timestamp of end of last fee sweep
-  uint256 public investmentsSweptSinceStarted; // number of investments that have been swept in the currently active sweep. when this equals activeInvestmentCount, the sweep is complete
-  bool public feeSweeping; // set true when we start sweeping, false when done. this is in case fee sweeps take more than one transaction. all sweeps must happen at the same NAV, so no other manager actions can happen until all fees have been wept once started
-  event FeesSwept(
-    address indexed investor,
-    address indexed investmentId,
-    uint256 feeSweepId,
-    uint256 highWaterMark,
-    uint256 usdManagementFee,
-    uint256 usdPerformanceFee,
-    uint256 fundManagementFee,
-    uint256 fundPerformanceFee
-  );
-
-  struct FeeWithdrawal {
-    address to; // fee beneficiary
-    uint256 fundAmount; // tokens burned
-    uint256 usdAmount;
-    bool usdTransferred;
-    uint256 timestamp;
-    uint256 navId;
-  }
-  FeeWithdrawal[] public feeWithdrawals; // append only, existing data is never modified
-  uint256 public feesSweptNotWithdrawn; // total count of fund tokens swept that hasn't yet been withdrawn, this is to ensure the manager doesn't withdraw fund tokens from his own investments
-  event FeesWithdrawn(
-    address to,
-    uint256 fundAmount,
-    uint256 usdAmount,
-    bool usdTransferred
-  );
-
-  struct InvestmentRequest {
-    address investor;
-    uint256 usdAmount;
-    uint256 minFundAmount; // min fund tokens to mint otherwise revert
-    uint256 deadline; // must be processed by deadline or revert
-    uint256 timestamp;
-    uint256 investmentId; // max uint until request is processed and an investment is made
-    bool processed;
-  }
-  InvestmentRequest[] public investmentRequests; // append only, existing data is never modified except for investmentId and processed if succeeded
-  event InvestmentRequested(
-    address indexed investor,
-    uint256 indexed investmentRequestId,
-    uint256 usdAmount,
-    uint256 minFundAmount,
-    uint256 deadline
-  );
-  event InvestmentRequestCanceled(
-    address indexed investor,
-    uint256 indexed investmentRequestId
-  );
-
-  struct RedemptionRequest {
-    address investor;
-    uint256 investmentId;
-    uint256 minUsdAmount; // min usd amount to net after fees
-    uint256 deadline;
-    uint256 timestamp;
-    bool processed;
-  }
-  RedemptionRequest[] public redemptionRequests; // append only, existing data is never modified except for processed
-  event RedemptionRequested(
+  event RedemptionRequestUpdated(
     address indexed investor,
     uint256 indexed investmentId,
-    uint256 indexed redemptionRequestId,
     uint256 minUsdAmount,
-    uint256 deadline
+    uint256 deadline,
+    uint256 nonce
   );
-  event RedemptionRequestCanceled(
-    address indexed investor,
-    uint256 indexed investmentId,
-    uint256 indexed redemptionRequestId
-  );
-
-  struct Redemption {
-    address investor;
-    uint256 investmentId;
-    uint256 redemptionRequestId; // max uint if manual
-    uint256 navId;
-    uint256 fundAmount;
-    uint256 usdAmount;
-    uint256 timestamp;
-    bool usdTransferred;
-  }
-  Redemption[] public redemptions; // append only, existing data is never modified
   event Redeemed(
     address indexed investor,
     uint256 indexed investmentId,
-    uint256 indexed redemptionRequestId, // max uint if manual
     uint256 fundAmount,
-    uint256 usdAmount,
-    bool usdTransferred
+    uint256 performanceFeeFundAmount,
+    uint256 usdAmount
   );
-
-  bool public closed; // set true after last investment redeems
-  event Closed();
-
+  event FeesCollected(
+    uint256 managementFeeFundAmount,
+    uint256 performanceFeeFundAmount,
+    uint256 nonFeeSupply
+  );
+  event FeesWithdrawn(
+    address indexed to,
+    uint256 fundAmount,
+    uint256 usdAmount
+  );
   event FeesChanged(uint256 managementFee, uint256 performanceFee);
-  event FundDetailsChanged(string logoUrl, string contactInfo, string tags);
-  event InvestorLimitsChanged(
-    uint256 maxInvestors,
-    uint256 maxInvestmentsPerInvestor,
-    uint256 minInvestmentAmount,
-    uint256 timelock
-  );
-  event FeeBeneficiaryChanged(address feeBeneficiary);
-  event AumUpdaterChanged(address aumUpdater);
+  event NewHighWaterPrice(uint256 indexed price);
+  event Closed();
 
   error InvalidFeeBeneficiary();
   error InvalidMaxInvestors();
@@ -264,15 +161,10 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   error PermitValueMismatch();
   error InvalidInvestmentId();
   error InvalidUpgrade();
-  error InvalidMinInvestmentAmount();
-  error InvalidInitialPrice();
-  error InvalidAmountReturnedZero();
-  error FeeSweeping();
-  error InvalidTimelock();
 
   function initialize(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
-    uint256[9] memory uintParams, // timelock, feeTimelock, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
+    uint256[7] memory uintParams, // timelock, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock
     string memory name,
     string memory symbol,
     string memory _logoUrl,
@@ -281,46 +173,31 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     bool _usingUsdToken,
     address _manager
   ) public initializer {
-    // called in order of inheritance, using _unchained version to avoid double calling
-    __ERC1967Upgrade_init_unchained();
-    __UUPSUpgradeable_init_unchained();
-    __EIP712_init_unchained(name, '1');
-    __Context_init_unchained();
-    __ERC20_init_unchained(name, symbol);
-    __ERC20Permit_init_unchained(name);
-    __ERC20Votes_init_unchained();
+    _FeeDividendToken_init(name, symbol, 6);
     registry = RegistryV0(msg.sender);
     usdToken = registry.usdToken();
     manager = _manager;
-    custodian = _manager;
     aumUpdater = addressParams[0];
     feeBeneficiary = addressParams[1];
-    if (feeBeneficiary == custodian) {
+    if (feeBeneficiary == manager) {
       revert InvalidFeeBeneficiary();
     }
     timelock = uintParams[0];
-    feeTimelock = uintParams[1];
-    managementFee = uintParams[2];
-    performanceFee = uintParams[3];
-    maxInvestors = uintParams[4];
-    maxInvestmentsPerInvestor = uintParams[5];
-    minInvestmentAmount = uintParams[6];
-    if (minInvestmentAmount < 1e6) {
-      revert InvalidMinInvestmentAmount();
-    }
-    initialPrice = uintParams[7];
-    if (initialPrice < 1e4 || initialPrice > 1e9) {
-      revert InvalidInitialPrice();
-    }
-    // initial aum
-    if (uintParams[8] > 0) {
-      _addInvestment(uintParams[8]);
-      doneImportingInvestments = true;
-    }
+    managementFee = uintParams[1];
+    performanceFee = uintParams[2];
+    maxInvestors = uintParams[3];
+    maxInvestmentsPerInvestor = uintParams[4];
+    minInvestmentAmount = uintParams[5];
+    feeTimelock = uintParams[6];
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
     tags = _tags;
     usingUsdToken = _usingUsdToken;
+    aumTimestamp = block.timestamp;
+    feeWithdrawnTimestamp = block.timestamp;
+    highWaterPrice = 1e16; // initial price of $0.01
+    highWaterPriceTimestamp = block.timestamp;
+    emit NewHighWaterPrice(highWaterPrice);
   }
 
   function version() public pure returns (uint256) {
@@ -344,35 +221,28 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
 
   modifier onlyManager() {
     if (msg.sender != manager) {
-      revert ManagerOnly();
+      revert ManagerOnly(); // Manager only
     }
     _;
   }
 
   modifier onlyAumUpdater() {
     if (msg.sender != aumUpdater) {
-      revert AumUpdaterOnly();
+      revert AumUpdaterOnly(); // AUM updater only
     }
     _;
   }
 
   modifier onlyWhitelisted() {
-    if (!investorInfo[msg.sender].whitelisted) {
+    if (!whitelist[msg.sender]) {
       revert WhitelistedOnly();
-    }
-    _;
-  }
-
-  modifier notFeeSweeping() {
-    if (feeSweeping) {
-      revert FeeSweeping();
     }
     _;
   }
 
   modifier notClosed() {
     if (closed) {
-      revert FundClosed();
+      revert FundClosed(); // Fund is closed
     }
     _;
   }
@@ -391,122 +261,6 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  function decimals() public pure override returns (uint8) {
-    return 6;
-  }
-
-  function navsLength() public view returns (uint256) {
-    return navs.length;
-  }
-
-  function investorsLength() public view returns (uint256) {
-    return investors.length;
-  }
-
-  function investmentsLength() public view returns (uint256) {
-    return investments.length;
-  }
-
-  function feeSweepsLength() public view returns (uint256) {
-    return feeSweeps.length;
-  }
-
-  function feeWithdrawalsLength() public view returns (uint256) {
-    return feeWithdrawals.length;
-  }
-
-  function investmentRequestsLength() public view returns (uint256) {
-    return investmentRequests.length;
-  }
-
-  function redemptionRequestsLength() public view returns (uint256) {
-    return redemptionRequests.length;
-  }
-
-  function redemptionsLength() public view returns (uint256) {
-    return redemptions.length;
-  }
-
-  function _calcFundAmount(uint256 usdAmount)
-    internal
-    view
-    returns (uint256 fundAmount)
-  {
-    if (navs.length > 0) {
-      // use latest aum and supply
-      Nav storage nav = navs[navs.length - 1];
-      fundAmount = (usdAmount * nav.supply) / nav.aum;
-    } else {
-      // use initial price
-      fundAmount = usdAmount / initialPrice;
-    }
-    if (fundAmount == 0) {
-      revert InvalidAmountReturnedZero();
-    }
-  }
-
-  function _calcUsdAmount(uint256 fundAmount)
-    internal
-    view
-    returns (uint256 usdAmount)
-  {
-    if (navs.length > 0) {
-      // use latest aum and supply
-      Nav storage nav = navs[navs.length - 1];
-      usdAmount = (fundAmount * nav.aum) / nav.supply;
-    } else {
-      // use initial price
-      usdAmount = fundAmount * initialPrice;
-    }
-    if (usdAmount == 0) {
-      revert InvalidAmountReturnedZero();
-    }
-  }
-
-  function _addNav(
-    uint256 newAum,
-    uint256 newTotalCapitalContributed,
-    string memory ipfsHash
-  ) internal {
-    uint256 supply = totalSupply();
-    uint256 navId = navs.length;
-    navs.push(
-      Nav({
-        aum: newAum,
-        supply: supply,
-        totalCapitalContributed: newTotalCapitalContributed,
-        timestamp: block.timestamp,
-        ipfsHash: ipfsHash
-      })
-    );
-    emit NavUpdated(
-      navId,
-      newAum,
-      supply,
-      newTotalCapitalContributed,
-      ipfsHash
-    );
-  }
-
-  function _addFeeWithdrawal(
-    address to,
-    uint256 fundAmount,
-    uint256 usdAmount,
-    bool usdTransferred
-  ) internal {
-    feeWithdrawals.push(
-      FeeWithdrawal({
-        to: to,
-        fundAmount: fundAmount,
-        usdAmount: usdAmount,
-        usdTransferred: usdTransferred,
-        timestamp: block.timestamp,
-        navId: navs.length // TODO: safety check?
-      })
-    );
-    emit FeesWithdrawn(to, fundAmount, usdAmount, usdTransferred);
-  }
-
   function updateAum(uint256 _aum, string calldata ipfsHash)
     public
     notClosed
@@ -515,20 +269,43 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     if (investments.length == 0) {
       revert NotActive(); // Fund cannot have AUM until the first investment is made
     }
-    if (!doneImportingInvestments) {
-      doneImportingInvestments = true;
+    uint256 previousAumTimestamp = aumTimestamp;
+    uint256 previousHighWaterPrice = highWaterPrice;
+    aum = _aum;
+    aumTimestamp = block.timestamp;
+    uint256 supply = totalSupply();
+    emit NavUpdated(_aum, supply, ipfsHash);
+    uint256 price = (aum * 1e18) / supply;
+    if (price > highWaterPrice) {
+      highWaterPrice = price;
+      highWaterPriceTimestamp = block.timestamp;
+      emit NewHighWaterPrice(highWaterPrice);
     }
-    // TODO: safety check?
-    _addNav(_aum, navs[navs.length - 1].totalCapitalContributed, ipfsHash);
+    _processFees(previousAumTimestamp, previousHighWaterPrice);
   }
 
-  function whitelistMulti(address[] calldata _investors)
+  function updateAumAndProcessInvestments(
+    uint256 _aum,
+    string calldata ipfsHash,
+    address[] calldata investors,
+    uint256[] calldata currentNonces
+  ) public {
+    if (investors.length != currentNonces.length) {
+      revert InvestorsNoncesLengthMismatch();
+    }
+    updateAum(_aum, ipfsHash);
+    for (uint256 i = 0; i < investors.length; i++) {
+      processInvestmentRequest(investors[i], currentNonces[i]);
+    }
+  }
+
+  function whitelistMulti(address[] calldata investors)
     public
     notClosed
     onlyManager
   {
-    for (uint256 i = 0; i < _investors.length; i++) {
-      _addToWhitelist(_investors[i]);
+    for (uint256 i = 0; i < investors.length; i++) {
+      _addToWhitelist(investors[i]);
     }
   }
 
@@ -536,52 +313,49 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     if (investorCount >= maxInvestors) {
       revert TooManyInvestors(); // Too many investors
     }
-    if (investorInfo[investor].whitelisted) {
+    if (whitelist[investor]) {
       revert AlreadyWhitelisted();
     }
     if (investor == manager) {
       revert InvalidInvestor();
     }
-    if (investors[investorInfo[investor].investorId] != investor) {
-      investorInfo[investor].investorId = investors.length;
-      investors.push(investor);
-    }
     investorCount++;
-    investorInfo[investor].whitelisted = true;
-    investorInfo[investor].investmentRequestId = type(uint256).max;
+    whitelist[investor] = true;
     emit Whitelisted(investor);
   }
 
-  function blacklistMulti(address[] calldata _investors)
+  function blacklistMulti(address[] calldata investors)
     public
     notClosed
     onlyManager
   {
-    for (uint256 i = 0; i < _investors.length; i++) {
-      address investor = _investors[i];
-      if (investorInfo[investor].activeInvestmentCount > 0) {
+    for (uint256 i = 0; i < investors.length; i++) {
+      if (activeInvestmentCountPerInvestor[investors[i]] > 0) {
         revert InvestorIsActive();
       }
-      if (!investorInfo[investor].whitelisted) {
+      if (!whitelist[investors[i]]) {
         revert NotInvestor();
       }
       investorCount--;
-      if (
-        investmentRequests[investorInfo[investor].investmentRequestId]
-          .investor == investor
-      ) {
-        // TODO: cancel investment request, emit event, etc
-        investorInfo[investor].investmentRequestId = type(uint256).max;
-      }
-      investorInfo[investor].whitelisted = false;
+      delete whitelist[investors[i]];
+      uint256 newNonce = investmentRequests[investors[i]].nonce;
+      delete investmentRequests[investors[i]];
+      investmentRequests[investors[i]].nonce = newNonce;
+      investmentRequests[investors[i]].timestamp = block.timestamp;
+      emit InvestmentRequestUpdated(investors[i], 0, 0, 0, 0, newNonce);
       emit Blacklisted(investors[i]);
     }
   }
 
-  // create a new request or replace an existing request
-  function createInvestmentRequest(
+  // Nonce prevents a race condition:
+  // Investor sends out tx to update an existing request
+  // Manager sends out tx to process request, accidentally frontruns, tx mines first
+  // Investor's tx mines and now he has a second investment request opened that he didn't intend
+  // It also prevents the manager from processing a request that has been updated since he sent the tx
+  function updateInvestmentRequest(
     uint256 usdAmount,
     uint256 minFundAmount,
+    uint256 maxFundAmount,
     uint256 deadline,
     uint256 currentNonce,
     uint8 v,
@@ -988,63 +762,99 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     usdAmount = ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
   }
 
-  function _processFees(uint256 investmentId) internal {
-    // TODO: global invariant stuff like feeSweeping bool?
-    // TODO: safety check?
+  function _processFees(
+    uint256 previousAumTimestamp,
+    uint256 previousHighWaterPrice
+  ) internal {
+    uint256 supply = totalSupply();
+    uint256 nonFeeSupply = supply - balanceOf(address(this));
+    uint256 managementFeeFundAmount = _calculateManagementFee(
+      nonFeeSupply,
+      previousAumTimestamp
+    );
+
+    uint256 performanceFeeFundAmount = 0;
+    // if a new high water mark is reached, calculate performance fee
+    if (previousHighWaterPrice != highWaterPrice) {
+      performanceFeeFundAmount =
+        ((highWaterPrice - previousHighWaterPrice) *
+          nonFeeSupply *
+          performanceFee) /
+        highWaterPrice /
+        10000;
+    }
+    _collectFees(
+      address(this),
+      managementFeeFundAmount + performanceFeeFundAmount
+    );
+    emit FeesCollected(
+      managementFeeFundAmount,
+      performanceFeeFundAmount,
+      nonFeeSupply
+    );
+  }
+
+  function _calculateManagementFee(
+    uint256 fundAmount,
+    uint256 previousFeeTimestamp
+  ) internal view returns (uint256) {
+    return
+      ((block.timestamp - previousFeeTimestamp) * managementFee * fundAmount) /
+      365.25 days /
+      10000; // management fee is over a whole year (365.25 days) and denoted in basis points so also need to divide by 10000
+  }
+
+  function _calculatePerformanceFee(uint256 investmentId)
+    internal
+    view
+    returns (uint256 performanceFeeFundAmount)
+  {
     Investment storage investment = investments[investmentId];
-    uint256 lastSweepTimestamp = investment.timestamp;
-    // if there was a fee sweep already, use the timestamp of the latest one instead
-    if (investment.feeSweepsCount > 0) {
-      lastSweepTimestamp = feeSweeps[
-        investment.feeSweepIds[investment.feeSweepsCount - 1]
-      ].timestamp;
+    uint256 initialPrice = (investment.initialUsdAmount * 1e18) /
+      investment.initialFundAmount;
+    uint256 priceNow = (aum * 1e18) / totalSupply();
+    // if the last high water mark happened after the investment was made
+    if (
+      highWaterPriceTimestamp > investment.timestamp &&
+      investment.initialHighWaterPrice > initialPrice
+    ) {
+      // calculate the performance fee between the price at investment and the high water mark at time of investment
+      performanceFeeFundAmount =
+        ((investment.initialHighWaterPrice - initialPrice) *
+          fromBase(investment.initialBaseAmount) *
+          performanceFee) /
+        investment.initialHighWaterPrice /
+        10000;
+    } else if (priceNow > initialPrice) {
+      // calculate the performance fee between the price at investment and current price
+      performanceFeeFundAmount =
+        ((priceNow - initialPrice) *
+          fromBase(investment.initialBaseAmount) *
+          performanceFee) /
+        priceNow /
+        10000;
     }
-    // calc management fee
-    uint256 usdManagementFee = (investment.managementFeeCostBasis *
-      ((block.timestamp - lastSweepTimestamp) * managementFee)) /
-      10000 /
-      365.25 days;
-    uint256 fundManagementFee = _calcFundAmount(usdManagementFee);
-    uint256 fundAmountNetOfManagementFee = investment.remainingFundAmount -
-      fundManagementFee;
-    uint256 usdAmountNetOfManagementFee = _calcUsdAmount(
-      fundAmountNetOfManagementFee
+  }
+
+  function remainingFundAmount(uint256 investmentId)
+    public
+    view
+    onlyValidInvestmentId(investmentId)
+    returns (uint256)
+  {
+    return fromBase(investments[investmentId].initialBaseAmount);
+  }
+
+  function unpaidFees(uint256 investmentId)
+    public
+    view
+    returns (uint256 managementFeeFundAmount, uint256 performanceFeeFundAmount)
+  {
+    managementFeeFundAmount = _calculateManagementFee(
+      remainingFundAmount(investmentId),
+      aumTimestamp
     );
-    uint256 highWaterMark = investment.highWaterMark;
-    uint256 usdPerformanceFee;
-    uint256 fundPerformanceFee;
-    // calc perf fee if value went above previous high water mark
-    if (usdAmountNetOfManagementFee > investment.highWaterMark) {
-      highWaterMark = usdAmountNetOfManagementFee;
-      uint256 usdGainAboveHighWatermark = usdAmountNetOfManagementFee -
-        investment.highWaterMark;
-      usdPerformanceFee = (usdGainAboveHighWatermark * performanceFee) / 10000;
-      fundPerformanceFee = _calcFundAmount(usdPerformanceFee);
-    }
-    uint256 feeSweepId = feeSweeps.length;
-    feeSweeps.push(
-      FeeSweep({
-        investor: investment.investor,
-        investmentId: investmentId,
-        navId: navs.length - 1,
-        highWaterMark: highWaterMark,
-        usdManagementFee: usdManagementFee,
-        usdPerformanceFee: usdPerformanceFee,
-        fundManagementFee: fundManagementFee,
-        fundPerformanceFee: fundPerformanceFee,
-        timestamp: block.timestamp
-      })
-    );
-    emit FeesSwept(
-      investment.investor,
-      investmentId,
-      feeSweepId,
-      highWaterMark,
-      usdManagementFee,
-      usdPerformanceFee,
-      fundManagementFee,
-      fundPerformanceFee
-    );
+    performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
   }
 
   function withdrawFees(
@@ -1056,9 +866,13 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 r,
     bytes32 s
   ) public onlyManager {
-    uint256 usdAmount = _calcUsdAmount(fundAmount);
+    if (!closed && block.timestamp < feeWithdrawnTimestamp + feeTimelock) {
+      revert NotPastFeeTimelock();
+    }
+    feeWithdrawnTimestamp = block.timestamp;
+    uint256 usdAmount = (fundAmount * aum) / totalSupply();
     _burn(address(this), fundAmount);
-    address to;
+    aum -= usdAmount;
     if (transferUsd) {
       if (!usingUsdToken) {
         revert NotUsingUsdToken();
@@ -1071,7 +885,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         revert PermitValueMismatch();
       }
       usdToken.permit(
-        custodian,
+        manager,
         address(this),
         permitValue,
         permitDeadline,
@@ -1079,13 +893,12 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         r,
         s
       );
-      usdToken.transferFrom(custodian, feeBeneficiary, usdAmount);
-      to = feeBeneficiary;
+      usdToken.transferFrom(manager, feeBeneficiary, usdAmount);
+      emit FeesWithdrawn(feeBeneficiary, fundAmount, usdAmount);
+    } else {
+      emit FeesWithdrawn(address(0), fundAmount, usdAmount);
     }
-    _addFeeWithdrawal(feeBeneficiary, fundAmount, usdAmount, transferUsd);
-    // TODO: add safety check, maybe refactor
-    Nav storage nav = navs[navs.length - 1];
-    _addNav(nav.aum - usdAmount, nav.totalCapitalContributed, '');
+    emit NavUpdated(aum, totalSupply(), '');
   }
 
   function editFundDetails(
@@ -1096,42 +909,25 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
     tags = _tags;
-    emit FundDetailsChanged(logoUrl, contactInfo, tags);
   }
 
   function editInvestorLimits(
     uint256 _maxInvestors,
     uint256 _maxInvestmentsPerInvestor,
-    uint256 _minInvestmentAmount,
-    uint256 _timelock
+    uint256 _minInvestmentAmount
   ) public onlyManager {
     if (_maxInvestors < 1) {
       revert InvalidMaxInvestors(); // Invalid max investors
     }
-    if (_minInvestmentAmount < 1e6) {
-      revert InvalidMinInvestmentAmount();
-    }
-    // make sure lockup can only be lowered
-    if (_timelock > timelock) {
-      revert InvalidTimelock();
-    }
     maxInvestors = _maxInvestors;
     maxInvestmentsPerInvestor = _maxInvestmentsPerInvestor;
     minInvestmentAmount = _minInvestmentAmount;
-    timelock = _timelock;
-    emit InvestorLimitsChanged(
-      maxInvestors,
-      maxInvestmentsPerInvestor,
-      minInvestmentAmount,
-      timelock
-    );
   }
 
   function editFees(uint256 _managementFee, uint256 _performanceFee)
     public
     onlyManager
   {
-    // make sure fees either stayed the same or went down
     if (
       _managementFee > managementFee ||
       _performanceFee > performanceFee ||
@@ -1145,16 +941,14 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   }
 
   function editFeeBeneficiary(address _feeBeneficiary) public onlyManager {
-    if (_feeBeneficiary == address(0) || _feeBeneficiary == custodian) {
+    if (_feeBeneficiary == address(0) || _feeBeneficiary == manager) {
       revert InvalidFeeBeneficiary(); // Invalid fee beneficiary
     }
     feeBeneficiary = _feeBeneficiary;
-    emit FeeBeneficiaryChanged(feeBeneficiary);
   }
 
   function editAumUpdater(address _aumUpdater) public onlyManager {
     aumUpdater = _aumUpdater;
-    emit AumUpdaterChanged(aumUpdater);
   }
 
   function _verifyUsdBalance(address from, uint256 amount) internal view {
@@ -1173,27 +967,10 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     address from,
     address to,
     uint256 amount
-  ) internal override {
+  ) internal virtual override {
     super._beforeTokenTransfer(from, to, amount);
     if (from != address(0) && to != address(0)) {
       revert NotTransferable(); // Token is not transferable
     }
   }
-
-  // TODO: may not need these 3? test without them
-  // function _afterTokenTransfer(
-  //   address from,
-  //   address to,
-  //   uint256 amount
-  // ) internal override {
-  //   super._afterTokenTransfer(from, to, amount);
-  // }
-
-  // function _mint(address to, uint256 amount) internal override {
-  //   super._mint(to, amount);
-  // }
-
-  // function _burn(address account, uint256 amount) internal override {
-  //   super._burn(account, amount);
-  // }
 }
