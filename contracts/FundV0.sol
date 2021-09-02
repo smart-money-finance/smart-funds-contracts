@@ -436,9 +436,9 @@ contract FundV0 is Initializable, ERC20Upgradeable, UUPSUpgradeable {
     return 6;
   }
 
-  // function navsLength() public view returns (uint256) {
-  //   return navs.length;
-  // }
+  function navsLength() public view returns (uint256) {
+    return navs.length;
+  }
 
   // function investorsLength() public view returns (uint256) {
   //   return investors.length;
