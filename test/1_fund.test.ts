@@ -132,10 +132,10 @@ describe('Fund', () => {
     await registry.whitelistMulti([owner.address]);
   });
 
-  step('Should create fund', async () => {
+  step('Should create new fund', async () => {
     const tx = await registry.newFund(
       [owner.address, wallets[5].address],
-      [1, 200, 2000, 20, 5, 1, 1],
+      [1, 200, 2000, 20, 5, 1, 1e6, 1e5, 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -143,43 +143,65 @@ describe('Fund', () => {
       'Hedge Fund,Test Fund,Other tag',
       true,
     );
+
     const txResp = await tx.wait();
     const fundAddress = txResp.events?.find(
       (event: Event) => event.event === 'FundCreated',
     )?.args?.fund;
     fund = FundV0__factory.connect(fundAddress, owner);
-    // fund = (await ethers.getContractAt('SmartFund', fundAddress)) as SmartFund;
-    const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
-    expect(await fund.aum()).to.eq(0);
-    expect(await fund.highWaterPrice()).to.eq(initialPrice);
-    expect(await fund.activeInvestmentCount()).to.eq(0);
-    expect(
-      await fund.activeInvestmentCountPerInvestor(wallets[1].address),
-    ).to.eq(0);
+    // const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
+    expect(await fund.initialPrice()).to.eq(1e5);
+    await expect(fund.navs(0)).to.be.reverted; // no nav set yet
     expect(await fund.investorCount()).to.eq(0);
-    await debug();
+    // console.log(await fund.name());
+    // expect(await fund.doneImportingInvestments()).to.equal(true);
+    // console.log(await fund.navs(0));
+    // expect((await fund.navs(0)).aum).to.eq(0);
+    // // expect(await fund.highWaterPrice()).to.eq(initialPrice);
+    expect(await fund.activeInvestmentCount()).to.eq(0);
+
+    expect(await fund.investorCount()).to.eq(0);
+    // // await debug();
   });
 
   step('Should whitelist clients', async () => {
-    expect(await fund.whitelist(wallets[1].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[2].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[3].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[4].address)).to.eq(false);
-
+    expect((await fund.investorInfo(wallets[1].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[2].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[3].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[4].address)).whitelisted).to.eq(
+      false,
+    );
     await fund.whitelistMulti([
       wallets[1].address,
       wallets[2].address,
       wallets[3].address,
       wallets[4].address,
     ]);
-
     expect(await fund.investorCount()).to.eq(4);
-    expect(await fund.whitelist(wallets[1].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[2].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[3].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[4].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[0].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[5].address)).to.eq(false);
+    expect((await fund.investorInfo(wallets[1].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[2].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[3].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[4].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[0].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[5].address)).whitelisted).to.eq(
+      false,
+    );
   });
 
   step('Should request to invest client funds', async () => {
@@ -194,17 +216,17 @@ describe('Fund', () => {
     );
     await fund
       .connect(wallets[2])
-      .updateInvestmentRequest(
+      .createOrUpdateInvestmentRequest(
         amountToInvest,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
-        0,
+        false,
         signature.v,
         signature.r,
         signature.s,
       );
-    const request = await fund.investmentRequests(wallets[2].address);
+    const request = await fund.investmentRequests(0);
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request }).to.deep.include({
       usdAmount: amountToInvest,
@@ -217,242 +239,242 @@ describe('Fund', () => {
     expect(await fund.balanceOf(wallets[2].address)).to.eq(0);
   });
 
-  step('Should process investment request', async () => {
-    const amountToInvest = ethers.utils.parseUnits('10000', 6);
-    const aumBefore = await fund.aum();
-    const supplyBefore = await fund.totalSupply();
-    expect(await fund.aum()).to.eq(aumBefore);
-    expect(await fund.totalSupply()).to.eq(supplyBefore);
-    await fund.processInvestmentRequest(wallets[2].address, 1);
-    const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
-    const aumAfter = await fund.aum();
-    const supplyAfter = await fund.totalSupply();
-    const price = aumAfter
-      .mul(ethers.utils.parseUnits('1', 18))
-      .div(supplyAfter);
-    const investment = await fund.investments(0);
-    const request = investment.investmentRequest;
-    const fundMinted = request.usdAmount.mul(supplyAfter).div(aumAfter);
-    expect(await fund.aum()).to.eq(amountToInvest);
-    const blankRequest = await fund.investmentRequests(wallets[2].address);
-    expect({ ...blankRequest }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(timestamp),
-    });
-    expect(await fund.highWaterPrice()).to.eq(price);
-    const priceAfter = aumAfter
-      .mul(ethers.utils.parseUnits('1', 18))
-      .div(supplyAfter);
-    expect({ ...investment }).to.deep.include({
-      investor: wallets[2].address,
-      initialUsdAmount: request.usdAmount,
-      initialFundAmount: fundMinted,
-      initialHighWaterPrice: priceAfter,
-      usdTransferred: true,
-      timestamp: ethers.BigNumber.from(timestamp),
-      redeemedTimestamp: ethers.BigNumber.from(0),
-      redemptionUsdTransferred: false,
-    });
-    expect(await usdToken.balanceOf(fund.address)).to.eq(0);
-    expect(await fund.balanceOf(investment.investor)).to.eq(fundMinted);
-    expect(await fund.activeInvestmentCount()).to.eq(1);
-    expect(
-      await fund.activeInvestmentCountPerInvestor(wallets[2].address),
-    ).to.eq(1);
-    await debug();
-  });
+  // step('Should process investment request', async () => {
+  //   const amountToInvest = ethers.utils.parseUnits('10000', 6);
+  //   const aumBefore = await fund.aum();
+  //   const supplyBefore = await fund.totalSupply();
+  //   expect(await fund.aum()).to.eq(aumBefore);
+  //   expect(await fund.totalSupply()).to.eq(supplyBefore);
+  //   await fund.processInvestmentRequest(wallets[2].address, 1);
+  //   const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
+  //   const aumAfter = await fund.aum();
+  //   const supplyAfter = await fund.totalSupply();
+  //   const price = aumAfter
+  //     .mul(ethers.utils.parseUnits('1', 18))
+  //     .div(supplyAfter);
+  //   const investment = await fund.investments(0);
+  //   const request = investment.investmentRequest;
+  //   const fundMinted = request.usdAmount.mul(supplyAfter).div(aumAfter);
+  //   expect(await fund.aum()).to.eq(amountToInvest);
+  //   const blankRequest = await fund.investmentRequests(wallets[2].address);
+  //   expect({ ...blankRequest }).to.deep.include({
+  //     usdAmount: ethers.BigNumber.from(0),
+  //     minFundAmount: ethers.BigNumber.from(0),
+  //     maxFundAmount: ethers.BigNumber.from(0),
+  //     deadline: ethers.BigNumber.from(0),
+  //     timestamp: ethers.BigNumber.from(timestamp),
+  //   });
+  //   expect(await fund.highWaterPrice()).to.eq(price);
+  //   const priceAfter = aumAfter
+  //     .mul(ethers.utils.parseUnits('1', 18))
+  //     .div(supplyAfter);
+  //   expect({ ...investment }).to.deep.include({
+  //     investor: wallets[2].address,
+  //     initialUsdAmount: request.usdAmount,
+  //     initialFundAmount: fundMinted,
+  //     initialHighWaterPrice: priceAfter,
+  //     usdTransferred: true,
+  //     timestamp: ethers.BigNumber.from(timestamp),
+  //     redeemedTimestamp: ethers.BigNumber.from(0),
+  //     redemptionUsdTransferred: false,
+  //   });
+  //   expect(await usdToken.balanceOf(fund.address)).to.eq(0);
+  //   expect(await fund.balanceOf(investment.investor)).to.eq(fundMinted);
+  //   expect(await fund.activeInvestmentCount()).to.eq(1);
+  //   expect(
+  //     await fund.activeInvestmentCountPerInvestor(wallets[2].address),
+  //   ).to.eq(1);
+  //   await debug();
+  // });
 
-  step('Should update AUM', async () => {
-    const newAum = await usdToken.balanceOf(owner.address);
-    const supply = await fund.totalSupply();
-    await fund.updateAum(newAum, '');
-    const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
-    const aumAfter = await fund.aum();
-    const supplyAfter = await fund.totalSupply();
-    expect(supplyAfter).to.eq(supply);
-    expect(aumAfter).to.eq(newAum);
-    expect(await fund.aumTimestamp()).to.eq(timestamp);
-    await debug();
-  });
+  // step('Should update AUM', async () => {
+  //   const newAum = await usdToken.balanceOf(owner.address);
+  //   const supply = await fund.totalSupply();
+  //   await fund.updateAum(newAum, '');
+  //   const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
+  //   const aumAfter = await fund.aum();
+  //   const supplyAfter = await fund.totalSupply();
+  //   expect(supplyAfter).to.eq(supply);
+  //   expect(aumAfter).to.eq(newAum);
+  //   expect(await fund.aumTimestamp()).to.eq(timestamp);
+  //   await debug();
+  // });
 
-  step('Should withdraw accrued fees', async () => {
-    const feesFundAmount = await fund.balanceOf(fund.address);
-    const usdAmount = feesFundAmount
-      .mul(await fund.aum())
-      .div(await fund.totalSupply());
-    expect(await usdToken.balanceOf(wallets[5].address)).to.eq(0);
-    const signature = await signPermit(
-      owner,
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      usdAmount,
-      ethers.constants.MaxUint256,
-    );
-    await fund.withdrawFees(
-      feesFundAmount,
-      true,
-      usdAmount,
-      ethers.constants.MaxUint256,
-      signature.v,
-      signature.r,
-      signature.s,
-    );
-    expect(await fund.balanceOf(fund.address)).to.eq(0);
-    expect(await usdToken.balanceOf(wallets[5].address)).to.eq(usdAmount);
-  });
+  // step('Should withdraw accrued fees', async () => {
+  //   const feesFundAmount = await fund.balanceOf(fund.address);
+  //   const usdAmount = feesFundAmount
+  //     .mul(await fund.aum())
+  //     .div(await fund.totalSupply());
+  //   expect(await usdToken.balanceOf(wallets[5].address)).to.eq(0);
+  //   const signature = await signPermit(
+  //     owner,
+  //     usdToken,
+  //     network.config.chainId || 1,
+  //     fund.address,
+  //     usdAmount,
+  //     ethers.constants.MaxUint256,
+  //   );
+  //   await fund.withdrawFees(
+  //     feesFundAmount,
+  //     true,
+  //     usdAmount,
+  //     ethers.constants.MaxUint256,
+  //     signature.v,
+  //     signature.r,
+  //     signature.s,
+  //   );
+  //   expect(await fund.balanceOf(fund.address)).to.eq(0);
+  //   expect(await usdToken.balanceOf(wallets[5].address)).to.eq(usdAmount);
+  // });
 
-  step('Should create, update, and cancel investment request', async () => {
-    const request = await fund.investmentRequests(wallets[3].address);
-    expect({ ...request }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(0),
-      nonce: ethers.BigNumber.from(0),
-    });
-    const signature = await signPermit(
-      wallets[3],
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      100,
-      ethers.constants.MaxUint256,
-    );
-    await fund
-      .connect(wallets[3])
-      .updateInvestmentRequest(
-        100,
-        1,
-        ethers.constants.MaxUint256,
-        ethers.constants.MaxUint256,
-        0,
-        signature.v,
-        signature.r,
-        signature.s,
-      );
-    const request1 = await fund.investmentRequests(wallets[3].address);
-    const timestamp1 = (await ethers.provider.getBlock('latest')).timestamp;
-    expect({ ...request1 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(100),
-      minFundAmount: ethers.BigNumber.from(1),
-      maxFundAmount: ethers.constants.MaxUint256,
-      deadline: ethers.constants.MaxUint256,
-      timestamp: ethers.BigNumber.from(timestamp1),
-      nonce: ethers.BigNumber.from(1),
-    });
-    const signature2 = await signPermit(
-      wallets[3],
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      210,
-      ethers.constants.MaxUint256,
-    );
-    await fund
-      .connect(wallets[3])
-      .updateInvestmentRequest(
-        210,
-        1,
-        ethers.constants.MaxUint256,
-        ethers.constants.MaxUint256,
-        1,
-        signature2.v,
-        signature2.r,
-        signature2.s,
-      );
-    const request2 = await fund.investmentRequests(wallets[3].address);
-    const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
-    expect({ ...request2 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(210),
-      minFundAmount: ethers.BigNumber.from(1),
-      maxFundAmount: ethers.constants.MaxUint256,
-      deadline: ethers.constants.MaxUint256,
-      timestamp: ethers.BigNumber.from(timestamp2),
-      nonce: ethers.BigNumber.from(2),
-    });
-    const signature3 = await signPermit(
-      wallets[3],
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      0,
-      ethers.constants.MaxUint256,
-    );
-    await fund
-      .connect(wallets[3])
-      .cancelInvestmentRequest(
-        ethers.constants.MaxUint256,
-        signature3.v,
-        signature3.r,
-        signature3.s,
-      );
-    const request3 = await fund.investmentRequests(wallets[3].address);
-    const timestamp3 = (await ethers.provider.getBlock('latest')).timestamp;
-    expect({ ...request3 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(timestamp3),
-      nonce: ethers.BigNumber.from(3),
-    });
-  });
+  // step('Should create, update, and cancel investment request', async () => {
+  //   const request = await fund.investmentRequests(wallets[3].address);
+  //   expect({ ...request }).to.deep.include({
+  //     usdAmount: ethers.BigNumber.from(0),
+  //     minFundAmount: ethers.BigNumber.from(0),
+  //     maxFundAmount: ethers.BigNumber.from(0),
+  //     deadline: ethers.BigNumber.from(0),
+  //     timestamp: ethers.BigNumber.from(0),
+  //     nonce: ethers.BigNumber.from(0),
+  //   });
+  //   const signature = await signPermit(
+  //     wallets[3],
+  //     usdToken,
+  //     network.config.chainId || 1,
+  //     fund.address,
+  //     100,
+  //     ethers.constants.MaxUint256,
+  //   );
+  //   await fund
+  //     .connect(wallets[3])
+  //     .updateInvestmentRequest(
+  //       100,
+  //       1,
+  //       ethers.constants.MaxUint256,
+  //       ethers.constants.MaxUint256,
+  //       0,
+  //       signature.v,
+  //       signature.r,
+  //       signature.s,
+  //     );
+  //   const request1 = await fund.investmentRequests(wallets[3].address);
+  //   const timestamp1 = (await ethers.provider.getBlock('latest')).timestamp;
+  //   expect({ ...request1 }).to.deep.include({
+  //     usdAmount: ethers.BigNumber.from(100),
+  //     minFundAmount: ethers.BigNumber.from(1),
+  //     maxFundAmount: ethers.constants.MaxUint256,
+  //     deadline: ethers.constants.MaxUint256,
+  //     timestamp: ethers.BigNumber.from(timestamp1),
+  //     nonce: ethers.BigNumber.from(1),
+  //   });
+  //   const signature2 = await signPermit(
+  //     wallets[3],
+  //     usdToken,
+  //     network.config.chainId || 1,
+  //     fund.address,
+  //     210,
+  //     ethers.constants.MaxUint256,
+  //   );
+  //   await fund
+  //     .connect(wallets[3])
+  //     .updateInvestmentRequest(
+  //       210,
+  //       1,
+  //       ethers.constants.MaxUint256,
+  //       ethers.constants.MaxUint256,
+  //       1,
+  //       signature2.v,
+  //       signature2.r,
+  //       signature2.s,
+  //     );
+  //   const request2 = await fund.investmentRequests(wallets[3].address);
+  //   const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
+  //   expect({ ...request2 }).to.deep.include({
+  //     usdAmount: ethers.BigNumber.from(210),
+  //     minFundAmount: ethers.BigNumber.from(1),
+  //     maxFundAmount: ethers.constants.MaxUint256,
+  //     deadline: ethers.constants.MaxUint256,
+  //     timestamp: ethers.BigNumber.from(timestamp2),
+  //     nonce: ethers.BigNumber.from(2),
+  //   });
+  //   const signature3 = await signPermit(
+  //     wallets[3],
+  //     usdToken,
+  //     network.config.chainId || 1,
+  //     fund.address,
+  //     0,
+  //     ethers.constants.MaxUint256,
+  //   );
+  //   await fund
+  //     .connect(wallets[3])
+  //     .cancelInvestmentRequest(
+  //       ethers.constants.MaxUint256,
+  //       signature3.v,
+  //       signature3.r,
+  //       signature3.s,
+  //     );
+  //   const request3 = await fund.investmentRequests(wallets[3].address);
+  //   const timestamp3 = (await ethers.provider.getBlock('latest')).timestamp;
+  //   expect({ ...request3 }).to.deep.include({
+  //     usdAmount: ethers.BigNumber.from(0),
+  //     minFundAmount: ethers.BigNumber.from(0),
+  //     maxFundAmount: ethers.BigNumber.from(0),
+  //     deadline: ethers.BigNumber.from(0),
+  //     timestamp: ethers.BigNumber.from(timestamp3),
+  //     nonce: ethers.BigNumber.from(3),
+  //   });
+  // });
 
-  step('Should manually redeem', async () => {
-    expect(await fund.activeInvestmentCount()).to.eq(1);
-    const permitAmount = await fund.redemptionUsdAmount(0);
-    const signature = await signPermit(
-      owner,
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      permitAmount,
-      ethers.constants.MaxUint256,
-    );
-    await fund.addManualRedemption(
-      0,
-      true,
-      permitAmount,
-      ethers.constants.MaxUint256,
-      signature.v,
-      signature.r,
-      signature.s,
-    );
-    expect(await fund.activeInvestmentCount()).to.eq(0);
-  });
+  // step('Should manually redeem', async () => {
+  //   expect(await fund.activeInvestmentCount()).to.eq(1);
+  //   const permitAmount = await fund.redemptionUsdAmount(0);
+  //   const signature = await signPermit(
+  //     owner,
+  //     usdToken,
+  //     network.config.chainId || 1,
+  //     fund.address,
+  //     permitAmount,
+  //     ethers.constants.MaxUint256,
+  //   );
+  //   await fund.addManualRedemption(
+  //     0,
+  //     true,
+  //     permitAmount,
+  //     ethers.constants.MaxUint256,
+  //     signature.v,
+  //     signature.r,
+  //     signature.s,
+  //   );
+  //   expect(await fund.activeInvestmentCount()).to.eq(0);
+  // });
 
-  step(
-    'Should add investment request and fail due to closed fund',
-    async () => {
-      const signature = await signPermit(
-        wallets[3],
-        usdToken,
-        network.config.chainId || 1,
-        fund.address,
-        100,
-        ethers.constants.MaxUint256,
-      );
-      await expect(
-        fund
-          .connect(wallets[3])
-          .updateInvestmentRequest(
-            100,
-            1,
-            ethers.constants.MaxUint256,
-            ethers.constants.MaxUint256,
-            0,
-            signature.v,
-            signature.r,
-            signature.s,
-          ),
-      ).to.be.reverted;
-    },
-  );
+  // step(
+  //   'Should add investment request and fail due to closed fund',
+  //   async () => {
+  //     const signature = await signPermit(
+  //       wallets[3],
+  //       usdToken,
+  //       network.config.chainId || 1,
+  //       fund.address,
+  //       100,
+  //       ethers.constants.MaxUint256,
+  //     );
+  //     await expect(
+  //       fund
+  //         .connect(wallets[3])
+  //         .updateInvestmentRequest(
+  //           100,
+  //           1,
+  //           ethers.constants.MaxUint256,
+  //           ethers.constants.MaxUint256,
+  //           0,
+  //           signature.v,
+  //           signature.r,
+  //           signature.s,
+  //         ),
+  //     ).to.be.reverted;
+  //   },
+  // );
 
   // step('Should manual redeem and fail', async () => {
   //   await expect(fund.addManualRedemption(1, true)).to.be.revertedWith(
@@ -523,31 +545,31 @@ describe('Fund', () => {
   //   await debug();
   // });
 
-  const debug = async () => {
-    console.log('AUM', ethers.utils.formatUnits(await fund.aum(), 6));
-    console.log(
-      'SUPPLY',
-      ethers.utils.formatUnits(await fund.totalSupply(), 6),
-    );
-    console.log(
-      'OWNER',
-      ethers.utils.formatUnits(await fund.balanceOf(owner.address), 6),
-    );
-    console.log(
-      'WALLET 1 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[1].address), 6),
-    );
-    console.log(
-      'WALLET 2 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[2].address), 6),
-    );
-    console.log(
-      'WALLET 3 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[3].address), 6),
-    );
-    console.log(
-      'WALLET 4 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[4].address), 6),
-    );
-  };
+  // const debug = async () => {
+  //   console.log('AUM', ethers.utils.formatUnits(await fund.aum(), 6));
+  //   console.log(
+  //     'SUPPLY',
+  //     ethers.utils.formatUnits(await fund.totalSupply(), 6),
+  //   );
+  //   console.log(
+  //     'OWNER',
+  //     ethers.utils.formatUnits(await fund.balanceOf(owner.address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 1 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[1].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 2 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[2].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 3 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[3].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 4 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[4].address), 6),
+  //   );
+  // };
 });
