@@ -2,9 +2,8 @@
 
 pragma solidity ^0.8.7;
 
-import { Initializable } from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 import { UUPSUpgradeable } from '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-// import { ERC20VotesUpgradeable, ERC20Upgradeable } from '@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol';
+// import { ERC20VotesUpgradeable } from '@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol';
 import { ERC20Upgradeable } from '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
 import { ERC20Permit } from '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
@@ -17,7 +16,8 @@ Storage layout cannot change but can be added to at the end
 version function must return hardcoded incremented version
 */
 
-contract FundV0 is Initializable, ERC20Upgradeable, UUPSUpgradeable {
+// contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
+contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
   RegistryV0 internal registry;
   ERC20Permit internal usdToken;
 
@@ -690,7 +690,6 @@ contract FundV0 is Initializable, ERC20Upgradeable, UUPSUpgradeable {
     // bytes32 r,
     // bytes32 s
     onlyUsingUsdToken
-    notManager
   {
     uint256 currentInvestmentRequestId = investorInfo[msg.sender]
       .investmentRequestId;
@@ -935,7 +934,6 @@ contract FundV0 is Initializable, ERC20Upgradeable, UUPSUpgradeable {
   function cancelRedemptionRequest(uint256 investmentId)
     public
     onlyValidInvestmentId(investmentId)
-    notManager
   {
     Investment storage investment = investments[investmentId];
     if (investment.constants.investor != msg.sender) {
