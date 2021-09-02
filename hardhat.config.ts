@@ -18,6 +18,18 @@ const config: HardhatUserConfig = {
       url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
     },
+    mumbai: {
+      chainId: 80001,
+      url: `https://polygon-mumbai.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: { mnemonic: process.env.MNEMONIC },
+      gasPrice: 8000000000, // TODO: change this every deploy
+    },
+    polygon: {
+      chainId: 137,
+      url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: { mnemonic: process.env.MNEMONIC },
+      gasPrice: 8000000000, // TODO: change this every deploy
+    },
   },
   solidity: {
     version: '0.8.7',
