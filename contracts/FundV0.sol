@@ -323,8 +323,20 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     // initial aum
     if (uintParams[8] > 0) {
-      // TODO:
-      // _addInvestment(uintParams[8]);
+      _addToWhitelist(manager);
+      uint256 usdAmount = uintParams[8];
+      uint256 fundAmount = _calcFundAmount(usdAmount);
+      _addInvestment(
+        manager,
+        usdAmount,
+        fundAmount,
+        block.timestamp,
+        usdAmount,
+        usdAmount,
+        type(uint256).max,
+        false,
+        false
+      );
       doneImportingInvestments = true;
     }
     logoUrl = _logoUrl;
