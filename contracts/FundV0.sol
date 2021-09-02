@@ -69,7 +69,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
 
   struct Investment {
     // constants
-    address investor; // if this is the fund contract itself, the investment is from the fund manager and is not subject to lockup
+    address investor; // if this is the fund manager, burns and mints go to the fund contract, not the manager, and lockup is not enforced
     uint256 timestamp; // timestamp of investment or when imported
     uint256 lockupTimestamp; // timestamp of investment or original investment if imported, for comparing to timelock
     uint256 initialUsdAmount; // dollar value at time of investment
@@ -105,9 +105,11 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 fundAmount,
     bool imported,
     uint256 initialHighWaterMark,
-    uint256 managementFeeCostBasis
+    uint256 managementFeeCostBasis,
+    uint256 lockupTimestamp
   );
 
+  // TODO: add a grouping ID?
   struct FeeSweep {
     address investor;
     uint256 investmentId;
@@ -125,7 +127,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   bool public feeSweeping; // set true when we start sweeping, false when done. this is in case fee sweeps take more than one transaction. all sweeps must happen at the same NAV, so no other manager actions can happen until all fees have been wept once started
   event FeesSwept(
     address indexed investor,
-    address indexed investmentId,
+    uint256 indexed investmentId,
     uint256 feeSweepId,
     uint256 highWaterMark,
     uint256 usdManagementFee,
@@ -133,6 +135,8 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 fundManagementFee,
     uint256 fundPerformanceFee
   );
+  event FeeSweepStarted();
+  event FeeSweepEnded();
 
   struct FeeWithdrawal {
     address to; // fee beneficiary
@@ -155,6 +159,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     address investor;
     uint256 usdAmount;
     uint256 minFundAmount; // min fund tokens to mint otherwise revert
+    uint256 maxFundAmount; // max fund tokens to mint otherwise revert
     uint256 deadline; // must be processed by deadline or revert
     uint256 timestamp;
     uint256 investmentId; // max uint until request is processed and an investment is made
@@ -166,6 +171,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 indexed investmentRequestId,
     uint256 usdAmount,
     uint256 minFundAmount,
+    uint256 maxFundAmount,
     uint256 deadline
   );
   event InvestmentRequestCanceled(
@@ -257,8 +263,6 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   error PriceOutsideTolerance();
   error NoExistingRequest();
   error RequestAlreadyCreated();
-  error NonceMismatch();
-  error InvestorsNoncesLengthMismatch();
   error InsufficientUsd();
   error InsufficientUsdApproved();
   error PermitValueMismatch();
@@ -269,6 +273,11 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   error InvalidAmountReturnedZero();
   error FeeSweeping();
   error InvalidTimelock();
+  error NotEnoughFees();
+  error DoneImportingInvestments();
+  error ManagerCannotCreateRequests();
+  error RequestOutOfDate();
+  error CannotTransferUsdToManager();
 
   function initialize(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
@@ -314,7 +323,8 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     // initial aum
     if (uintParams[8] > 0) {
-      _addInvestment(uintParams[8]);
+      // TODO:
+      // _addInvestment(uintParams[8]);
       doneImportingInvestments = true;
     }
     logoUrl = _logoUrl;
@@ -345,6 +355,13 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   modifier onlyManager() {
     if (msg.sender != manager) {
       revert ManagerOnly();
+    }
+    _;
+  }
+
+  modifier notManager() {
+    if (msg.sender == manager) {
+      revert ManagerCannotCreateRequests();
     }
     _;
   }
@@ -387,6 +404,13 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   modifier onlyValidInvestmentId(uint256 investmentId) {
     if (investmentId >= investments.length) {
       revert InvalidInvestmentId();
+    }
+    _;
+  }
+
+  modifier notDoneImporting() {
+    if (doneImportingInvestments) {
+      revert DoneImportingInvestments();
     }
     _;
   }
@@ -518,7 +542,6 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     if (!doneImportingInvestments) {
       doneImportingInvestments = true;
     }
-    // TODO: safety check?
     _addNav(_aum, navs[navs.length - 1].totalCapitalContributed, ipfsHash);
   }
 
@@ -566,41 +589,48 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         revert NotInvestor();
       }
       investorCount--;
+      uint256 investmentRequestId = investorInfo[investor].investmentRequestId;
       if (
-        investmentRequests[investorInfo[investor].investmentRequestId]
-          .investor == investor
+        investmentRequestId != type(uint256).max &&
+        investmentRequests[investmentRequestId].investor == investor
       ) {
-        // TODO: cancel investment request, emit event, etc
         investorInfo[investor].investmentRequestId = type(uint256).max;
+        emit InvestmentRequestCanceled(msg.sender, investmentRequestId);
       }
       investorInfo[investor].whitelisted = false;
       emit Blacklisted(investors[i]);
     }
   }
 
-  // create a new request or replace an existing request
-  function createInvestmentRequest(
+  // create a new request where one doesn't already exist or update an existing one
+  // bool update prevents race conditions where investor wants to update and manager wants to process
+  function createOrUpdateInvestmentRequest(
     uint256 usdAmount,
     uint256 minFundAmount,
+    uint256 maxFundAmount,
     uint256 deadline,
-    uint256 currentNonce,
+    bool update,
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public notClosed onlyUsingUsdToken onlyWhitelisted {
-    if (investmentRequests[msg.sender].nonce != currentNonce) {
-      revert NonceMismatch();
+  ) public notClosed onlyUsingUsdToken onlyWhitelisted notManager {
+    if (
+      update &&
+      investorInfo[msg.sender].investmentRequestId == type(uint256).max
+    ) {
+      revert NoExistingRequest();
     }
     if (
-      activeInvestmentCountPerInvestor[msg.sender] >= maxInvestmentsPerInvestor
+      investorInfo[msg.sender].activeInvestmentCount >=
+      maxInvestmentsPerInvestor
     ) {
-      revert MaxInvestmentsReached(); // Investor has reached max investment limit
+      revert MaxInvestmentsReached();
     }
     if (usdAmount < 1 || usdAmount < minInvestmentAmount) {
       revert InvestmentTooSmall();
     }
     if (minFundAmount == 0) {
-      revert MinAmountZero(); // Minimum amount must be greater than 0
+      revert MinAmountZero();
     }
     if (maxFundAmount <= minFundAmount) {
       revert InvalidMaxAmount();
@@ -610,26 +640,26 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     _verifyUsdBalance(msg.sender, usdAmount);
     usdToken.permit(msg.sender, address(this), usdAmount, deadline, v, r, s);
-    // save some gas?
-    if (investmentRequests[msg.sender].deadline != 0) {
-      delete investmentRequests[msg.sender];
-    }
-    uint256 newNonce = currentNonce + 1;
-    investmentRequests[msg.sender] = InvestmentRequest({
-      usdAmount: usdAmount,
-      minFundAmount: minFundAmount,
-      maxFundAmount: maxFundAmount,
-      timestamp: block.timestamp,
-      deadline: deadline,
-      nonce: newNonce
-    });
-    emit InvestmentRequestUpdated(
+    uint256 investmentRequestId = investmentRequests.length;
+    investmentRequests.push(
+      InvestmentRequest({
+        investor: msg.sender,
+        usdAmount: usdAmount,
+        minFundAmount: minFundAmount,
+        maxFundAmount: maxFundAmount,
+        deadline: deadline,
+        timestamp: block.timestamp,
+        investmentId: type(uint256).max,
+        processed: false
+      })
+    );
+    emit InvestmentRequested(
       msg.sender,
+      investmentRequestId,
       usdAmount,
       minFundAmount,
       maxFundAmount,
-      deadline,
-      newNonce
+      deadline
     );
   }
 
@@ -638,90 +668,127 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public notClosed onlyUsingUsdToken onlyWhitelisted {
-    if (investmentRequests[msg.sender].deadline == 0) {
+  ) public notClosed onlyUsingUsdToken onlyWhitelisted notManager {
+    uint256 currentInvestmentRequestId = investorInfo[msg.sender]
+      .investmentRequestId;
+    if (currentInvestmentRequestId == type(uint256).max) {
       revert NoExistingRequest();
     }
     usdToken.permit(msg.sender, address(this), 0, permitDeadline, v, r, s);
-    uint256 newNonce = investmentRequests[msg.sender].nonce + 1;
-    delete investmentRequests[msg.sender];
-    investmentRequests[msg.sender].nonce = newNonce;
-    investmentRequests[msg.sender].timestamp = block.timestamp;
-    emit InvestmentRequestUpdated(msg.sender, 0, 0, 0, 0, newNonce);
+    investorInfo[msg.sender].investmentRequestId = type(uint256).max;
+    emit InvestmentRequestCanceled(msg.sender, currentInvestmentRequestId);
   }
 
   function _addInvestment(
     address investor,
     uint256 usdAmount,
     uint256 fundAmount,
+    uint256 lockupTimestamp,
+    uint256 highWaterMark,
+    uint256 managementFeeCostBasis,
+    uint256 investmentRequestId,
     bool transferUsd,
-    InvestmentRequest memory investmentRequest
+    bool imported
   ) internal {
     if (
-      activeInvestmentCountPerInvestor[investor] >= maxInvestmentsPerInvestor
+      investorInfo[investor].activeInvestmentCount >= maxInvestmentsPerInvestor
     ) {
-      revert MaxInvestmentsReached(); // Investor has reached max investment limit
+      revert MaxInvestmentsReached();
     }
     if (transferUsd) {
       _verifyUsdBalance(investor, usdAmount);
       _verifyUsdAllowance(investor, usdAmount);
-      usdToken.transferFrom(investor, manager, usdAmount);
+      usdToken.transferFrom(investor, custodian, usdAmount);
     }
-    aum += usdAmount;
-    capitalContributed += usdAmount;
-    _mint(investor, fundAmount);
+    if (investor == manager) {
+      _mint(address(this), fundAmount);
+    } else {
+      _mint(investor, fundAmount);
+    }
+    // TODO: move this into a modifier somehow?
+    if (!imported && !doneImportingInvestments) {
+      doneImportingInvestments = true;
+    }
+    uint256 investmentId = investments.length;
+    uint256 navId = type(uint256).max;
+    if (navs.length > 0) {
+      navId = navs.length - 1;
+    }
     investments.push(
       Investment({
-        investmentRequest: investmentRequest,
         investor: investor,
+        timestamp: block.timestamp,
+        lockupTimestamp: lockupTimestamp,
         initialUsdAmount: usdAmount,
         initialFundAmount: fundAmount,
-        initialBaseAmount: toBase(fundAmount),
-        initialHighWaterPrice: highWaterPrice,
+        initialHighWaterMark: highWaterMark,
+        managementFeeCostBasis: managementFeeCostBasis,
+        investmentRequestId: investmentRequestId,
+        navId: navId,
         usdTransferred: transferUsd,
-        timestamp: block.timestamp,
-        redeemedTimestamp: 0,
-        redemptionUsdTransferred: false
+        imported: imported,
+        remainingFundAmount: fundAmount,
+        usdManagementFeesSwept: 0,
+        usdPerformanceFeesSwept: 0,
+        fundManagementFeesSwept: 0,
+        fundPerformanceFeesSwept: 0,
+        highWaterMark: highWaterMark,
+        feeSweepIds: new uint256[](0), // TODO: look into whether this is right
+        feeSweepsCount: 0,
+        redemptionRequestId: type(uint256).max,
+        redemptionId: type(uint256).max,
+        redeemed: false
       })
     );
     activeInvestmentCount++;
-    activeInvestmentCountPerInvestor[investor]++;
+    investorInfo[investor].activeInvestmentCount++;
+    investorInfo[investor].investmentIds.push(investmentId);
     emit Invested(
       investor,
-      investments.length - 1,
+      investmentId,
+      investmentRequestId,
       usdAmount,
       fundAmount,
-      investmentRequest.nonce
+      imported,
+      highWaterMark,
+      managementFeeCostBasis,
+      lockupTimestamp
     );
-    emit NavUpdated(aum, totalSupply(), '');
+    uint256 newAum = usdAmount;
+    uint256 newTotalCapitalContributed = usdAmount;
+    if (navs.length > 0) {
+      Nav storage nav = navs[navs.length - 1];
+      newAum += nav.aum;
+      newTotalCapitalContributed += nav.totalCapitalContributed;
+    }
+    _addNav(newAum, newTotalCapitalContributed, '');
   }
 
-  function processInvestmentRequest(address investor, uint256 currentNonce)
+  function processInvestmentRequest(uint256 investmentRequestId)
     public
     notClosed
     onlyUsingUsdToken
     onlyManager
   {
-    if (!whitelist[investor]) {
+    if (investmentRequestId >= investmentRequests.length) {
+      revert NoExistingRequest();
+    }
+    InvestmentRequest storage investmentRequest = investmentRequests[
+      investmentRequestId
+    ];
+    if (!investorInfo[investmentRequest.investor].whitelisted) {
       revert NotInvestor();
     }
-    InvestmentRequest storage investmentRequest = investmentRequests[investor];
-    if (investmentRequest.nonce != currentNonce) {
-      revert NonceMismatch();
-    }
-    if (investmentRequest.deadline == 0) {
-      revert NoExistingRequest();
+    if (
+      investorInfo[investmentRequest.investor].investmentRequestId !=
+      investmentRequestId
+    ) {
+      revert RequestOutOfDate();
     }
     if (investmentRequest.deadline < block.timestamp) {
       revert AfterDeadline();
     }
-    uint256 fundAmount;
-    // if first investment, use price of 1 cent
-    if (investments.length == 0) {
-      fundAmount = investmentRequest.usdAmount * 100;
-    } else {
-      fundAmount = (investmentRequest.usdAmount * totalSupply()) / aum;
-    }
+    uint256 fundAmount = _calcFundAmount(investmentRequest.usdAmount);
     if (
       fundAmount < investmentRequest.minFundAmount ||
       fundAmount > investmentRequest.maxFundAmount
@@ -729,17 +796,20 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
       revert PriceOutsideTolerance();
     }
     _addInvestment(
-      investor,
+      investmentRequest.investor,
       investmentRequest.usdAmount,
       fundAmount,
+      block.timestamp,
+      investmentRequest.usdAmount,
+      investmentRequest.usdAmount,
+      investmentRequestId,
       true,
-      investmentRequest
+      false
     );
-    uint256 newNonce = currentNonce + 1;
-    delete investmentRequests[investor];
-    investmentRequests[investor].nonce = newNonce;
-    investmentRequests[investor].timestamp = block.timestamp;
-    emit InvestmentRequestUpdated(investor, 0, 0, 0, 0, newNonce);
+    investmentRequest.processed = true;
+    investmentRequest.investmentId = investments.length - 1;
+    investorInfo[investmentRequest.investor].investmentRequestId = type(uint256)
+      .max;
   }
 
   function addManualInvestment(address investor, uint256 usdAmount)
@@ -747,55 +817,72 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     notClosed
     onlyManager
   {
-    if (!whitelist[investor]) {
+    if (!investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
     }
-    uint256 fundAmount;
-    // if intialization investment, use price of 1 cent
-    if (investments.length == 0) {
-      fundAmount = usdAmount * 100;
-    } else {
-      fundAmount = (usdAmount * totalSupply()) / aum;
-    }
+    uint256 fundAmount = _calcFundAmount(usdAmount);
     _addInvestment(
       investor,
       usdAmount,
       fundAmount,
+      block.timestamp,
+      usdAmount,
+      usdAmount,
+      type(uint256).max,
       false,
-      InvestmentRequest({
-        usdAmount: 0,
-        minFundAmount: 0,
-        maxFundAmount: 0,
-        timestamp: 0,
-        deadline: 0,
-        nonce: 0
-      })
+      false
     );
   }
 
-  function updateRedemptionRequest(
+  function importInvestment(
+    address investor,
+    uint256 usdAmountRemaining,
+    uint256 lockupTimestamp,
+    uint256 highWaterMark,
+    uint256 originalUsdAmount
+  ) public notClosed onlyManager notDoneImporting {
+    if (!investorInfo[investor].whitelisted) {
+      _addToWhitelist(investor);
+    }
+    uint256 fundAmount = _calcFundAmount(usdAmountRemaining);
+    _addInvestment(
+      investor,
+      usdAmountRemaining,
+      fundAmount,
+      lockupTimestamp,
+      highWaterMark,
+      originalUsdAmount,
+      type(uint256).max,
+      false,
+      true
+    );
+  }
+
+  function createOrUpdateRedemptionRequest(
     uint256 investmentId,
     uint256 minUsdAmount,
     uint256 deadline,
-    uint256 currentNonce
+    bool update // used to prevent race conditions
   )
     public
+    notClosed
     onlyUsingUsdToken
     onlyWhitelisted
     onlyValidInvestmentId(investmentId)
+    notManager
   {
     Investment storage investment = investments[investmentId];
+    if (update && investment.redemptionRequestId == type(uint256).max) {
+      revert NoExistingRequest();
+    }
     if (investment.investor != msg.sender) {
       revert NotInvestmentOwner();
     }
-    if (investment.redeemedTimestamp != 0) {
+    if (investment.redeemed) {
       revert InvestmentRedeemed();
     }
-    if (investment.timestamp + timelock > block.timestamp) {
+    if (investment.lockupTimestamp + timelock > block.timestamp) {
       revert InvestmentLockedUp();
-    }
-    if (redemptionRequests[investmentId].nonce != currentNonce) {
-      revert NonceMismatch();
     }
     if (minUsdAmount < 1) {
       revert MinAmountZero();
@@ -803,20 +890,24 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     if (deadline < block.timestamp) {
       revert AfterDeadline();
     }
-    delete redemptionRequests[investmentId];
-    uint256 newNonce = currentNonce + 1;
-    redemptionRequests[investmentId] = RedemptionRequest({
-      minUsdAmount: minUsdAmount,
-      deadline: deadline,
-      timestamp: block.timestamp,
-      nonce: newNonce
-    });
-    emit RedemptionRequestUpdated(
+    uint256 redemptionRequestId = redemptionRequests.length;
+    investment.redemptionRequestId = redemptionRequestId;
+    redemptionRequests.push(
+      RedemptionRequest({
+        investor: msg.sender,
+        investmentId: investmentId,
+        minUsdAmount: minUsdAmount,
+        deadline: deadline,
+        timestamp: block.timestamp,
+        processed: false
+      })
+    );
+    emit RedemptionRequested(
       msg.sender,
       investmentId,
+      redemptionRequestId,
       minUsdAmount,
-      deadline,
-      newNonce
+      deadline
     );
   }
 
@@ -825,27 +916,31 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     onlyUsingUsdToken
     onlyWhitelisted
     onlyValidInvestmentId(investmentId)
+    notManager
   {
     Investment storage investment = investments[investmentId];
     if (investment.investor != msg.sender) {
       revert NotInvestmentOwner();
     }
-    if (investment.redeemedTimestamp != 0) {
+    if (investment.redeemed) {
       revert InvestmentRedeemed();
     }
-    if (redemptionRequests[investmentId].deadline == 0) {
+    uint256 currentRedemptionRequestId = investment.redemptionRequestId;
+    if (currentRedemptionRequestId == type(uint256).max) {
       revert NoExistingRequest();
     }
-    uint256 newNonce = redemptionRequests[investmentId].nonce + 1;
-    delete redemptionRequests[investmentId];
-    redemptionRequests[investmentId].nonce = newNonce;
-    redemptionRequests[investmentId].timestamp = block.timestamp;
-    emit RedemptionRequestUpdated(msg.sender, investmentId, 0, 0, newNonce);
+    investment.redemptionRequestId = type(uint256).max;
+    emit RedemptionRequestCanceled(
+      msg.sender,
+      investmentId,
+      currentRedemptionRequestId
+    );
   }
 
   function _redeem(
     uint256 investmentId,
     uint256 minUsdAmount,
+    uint256 redemptionRequestId,
     bool transferUsd,
     uint256 permitValue,
     uint256 permitDeadline,
@@ -853,28 +948,22 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 r,
     bytes32 s
   ) internal {
+    _processFeesOnInvestment(investmentId, false);
     Investment storage investment = investments[investmentId];
-    uint256 performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
-    uint256 fundAmount = fromBase(investment.initialBaseAmount);
-    uint256 usdAmount = ((fundAmount - performanceFeeFundAmount) * aum) /
-      totalSupply();
+    uint256 usdAmount = _calcUsdAmount(investment.remainingFundAmount);
     if (usdAmount < minUsdAmount) {
       revert PriceOutsideTolerance();
     }
-    // mark investment as redeemed and lower total investment count
-    investment.redeemedTimestamp = block.timestamp;
-    investment.redemptionUsdTransferred = transferUsd;
-    activeInvestmentCount--;
-    activeInvestmentCountPerInvestor[investment.investor]--;
-    // burn fund tokens
-    _burn(investment.investor, fundAmount);
-    if (performanceFeeFundAmount > 0) {
-      // mint uncollected performance fee tokens
-      _mint(address(this), performanceFeeFundAmount);
+    if (investment.investor == manager) {
+      _burn(address(this), investment.remainingFundAmount);
+    } else {
+      _burn(investment.investor, investment.remainingFundAmount);
     }
-    // subtract usd amount from aum
-    aum -= usdAmount;
-    capitalContributed -= investment.initialUsdAmount;
+    uint256 redemptionId = redemptions.length;
+    investment.redeemed = true;
+    investment.redemptionId = redemptionId;
+    activeInvestmentCount--;
+    investorInfo[investment.investor].activeInvestmentCount--;
     if (transferUsd) {
       if (!usingUsdToken) {
         revert NotUsingUsdToken();
@@ -885,7 +974,7 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         revert PermitValueMismatch();
       }
       usdToken.permit(
-        manager,
+        custodian,
         address(this),
         permitValue,
         permitDeadline,
@@ -893,16 +982,34 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         r,
         s
       );
-      usdToken.transferFrom(manager, investment.investor, usdAmount);
+      usdToken.transferFrom(custodian, investment.investor, usdAmount);
     }
+    redemptions.push(
+      Redemption({
+        investor: investment.investor,
+        investmentId: investmentId,
+        redemptionRequestId: redemptionRequestId,
+        navId: navs.length - 1,
+        fundAmount: investment.remainingFundAmount,
+        usdAmount: usdAmount,
+        timestamp: block.timestamp,
+        usdTransferred: transferUsd
+      })
+    );
     emit Redeemed(
       investment.investor,
       investmentId,
-      fundAmount,
-      performanceFeeFundAmount,
-      usdAmount
+      redemptionRequestId,
+      investment.remainingFundAmount,
+      usdAmount,
+      transferUsd
     );
-    emit NavUpdated(aum, totalSupply(), '');
+    Nav storage nav = navs[navs.length - 1];
+    _addNav(
+      nav.aum - usdAmount,
+      nav.totalCapitalContributed - investment.initialUsdAmount,
+      ''
+    );
     if (activeInvestmentCount == 0) {
       closed = true;
       emit Closed();
@@ -910,33 +1017,33 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
   }
 
   function processRedemptionRequest(
-    uint256 investmentId,
-    uint256 currentNonce,
+    uint256 redemptionRequestId,
     uint256 permitValue,
     uint256 permitDeadline,
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public onlyUsingUsdToken onlyManager onlyValidInvestmentId(investmentId) {
-    Investment storage investment = investments[investmentId];
-    if (investment.redeemedTimestamp != 0) {
-      revert InvestmentRedeemed();
+  ) public notClosed onlyUsingUsdToken onlyManager {
+    if (redemptionRequestId >= redemptionRequests.length) {
+      revert NoExistingRequest();
     }
     RedemptionRequest storage redemptionRequest = redemptionRequests[
-      investmentId
+      redemptionRequestId
     ];
-    if (redemptionRequest.nonce != currentNonce) {
-      revert NonceMismatch();
+    Investment storage investment = investments[redemptionRequest.investmentId];
+    if (investment.redeemed) {
+      revert InvestmentRedeemed();
     }
-    if (redemptionRequest.deadline == 0) {
-      revert NoExistingRequest();
+    if (investment.redemptionRequestId != redemptionRequestId) {
+      revert RequestOutOfDate();
     }
     if (redemptionRequest.deadline < block.timestamp) {
       revert AfterDeadline();
     }
     _redeem(
-      investmentId,
+      redemptionRequest.investmentId,
       redemptionRequest.minUsdAmount,
+      redemptionRequestId,
       true,
       permitValue,
       permitDeadline,
@@ -956,23 +1063,32 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 s
   ) public onlyManager onlyValidInvestmentId(investmentId) {
     Investment storage investment = investments[investmentId];
-    if (investment.redeemedTimestamp != 0) {
+    if (investment.investor == manager && transferUsd) {
+      revert CannotTransferUsdToManager();
+    }
+    if (investment.redeemed) {
       revert InvestmentRedeemed();
     }
-    if (redemptionRequests[investmentId].deadline != 0) {
-      uint256 newNonce = redemptionRequests[investmentId].nonce + 1;
-      delete redemptionRequests[investmentId];
-      redemptionRequests[investmentId].nonce = newNonce;
-      redemptionRequests[investmentId].timestamp = block.timestamp;
-      emit RedemptionRequestUpdated(
+    uint256 redemptionRequestId = investment.redemptionRequestId;
+    if (redemptionRequestId != type(uint256).max) {
+      investment.redemptionRequestId = type(uint256).max;
+      emit RedemptionRequestCanceled(
         investment.investor,
         investmentId,
-        0,
-        0,
-        newNonce
+        redemptionRequestId
       );
     }
-    _redeem(investmentId, 1, transferUsd, permitValue, permitDeadline, v, r, s);
+    _redeem(
+      investmentId,
+      1,
+      type(uint256).max,
+      transferUsd,
+      permitValue,
+      permitDeadline,
+      v,
+      r,
+      s
+    );
   }
 
   // the usd amount if this investment was redeemed right now
@@ -983,14 +1099,51 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     onlyValidInvestmentId(investmentId)
     returns (uint256 usdAmount)
   {
-    uint256 performanceFeeFundAmount = _calculatePerformanceFee(investmentId);
-    uint256 fundAmount = fromBase(investments[investmentId].initialBaseAmount);
-    usdAmount = ((fundAmount - performanceFeeFundAmount) * aum) / totalSupply();
+    (, uint256 fundManagementFee, , uint256 fundPerformanceFee, ) = _calcFees(
+      investmentId,
+      false
+    );
+    usdAmount = _calcUsdAmount(
+      investments[investmentId].remainingFundAmount -
+        fundManagementFee -
+        fundPerformanceFee
+    );
   }
 
-  function _processFees(uint256 investmentId) internal {
-    // TODO: global invariant stuff like feeSweeping bool?
-    // TODO: safety check?
+  function processFees(uint256[] calldata investmentIds) public onlyManager {
+    if (!doneImportingInvestments) {
+      doneImportingInvestments = true;
+    }
+    if (!feeSweeping) {
+      feeSweeping = true;
+      emit FeeSweepStarted();
+    }
+    if (block.timestamp < lastFeeSweepEndedTimestamp + feeTimelock) {
+      revert NotPastFeeTimelock();
+    }
+    for (uint256 i = 0; i < investmentIds.length; i++) {
+      _processFeesOnInvestment(investmentIds[i], true);
+      investmentsSweptSinceStarted++;
+      if (investmentsSweptSinceStarted == activeInvestmentCount) {
+        feeSweeping = false;
+        lastFeeSweepEndedTimestamp = block.timestamp;
+        investmentsSweptSinceStarted = 0;
+        emit FeeSweepEnded();
+      }
+    }
+  }
+
+  function _calcFees(uint256 investmentId, bool enforceFeeTimelock)
+    internal
+    view
+    returns (
+      uint256 usdManagementFee,
+      uint256 fundManagementFee,
+      uint256 usdPerformanceFee,
+      uint256 fundPerformanceFee,
+      uint256 highWaterMark
+    )
+  {
     Investment storage investment = investments[investmentId];
     uint256 lastSweepTimestamp = investment.timestamp;
     // if there was a fee sweep already, use the timestamp of the latest one instead
@@ -999,20 +1152,26 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
         investment.feeSweepIds[investment.feeSweepsCount - 1]
       ].timestamp;
     }
+    if (
+      enforceFeeTimelock &&
+      (block.timestamp < lastSweepTimestamp + feeTimelock ||
+        lastSweepTimestamp >= lastFeeSweepEndedTimestamp)
+    ) {
+      revert NotPastFeeTimelock(); // TODO: maybe a separate error to pass the specific investment id back?
+    }
     // calc management fee
-    uint256 usdManagementFee = (investment.managementFeeCostBasis *
-      ((block.timestamp - lastSweepTimestamp) * managementFee)) /
+    usdManagementFee =
+      (investment.managementFeeCostBasis *
+        ((block.timestamp - lastSweepTimestamp) * managementFee)) /
       10000 /
       365.25 days;
-    uint256 fundManagementFee = _calcFundAmount(usdManagementFee);
+    fundManagementFee = _calcFundAmount(usdManagementFee);
     uint256 fundAmountNetOfManagementFee = investment.remainingFundAmount -
       fundManagementFee;
     uint256 usdAmountNetOfManagementFee = _calcUsdAmount(
       fundAmountNetOfManagementFee
     );
-    uint256 highWaterMark = investment.highWaterMark;
-    uint256 usdPerformanceFee;
-    uint256 fundPerformanceFee;
+    highWaterMark = investment.highWaterMark;
     // calc perf fee if value went above previous high water mark
     if (usdAmountNetOfManagementFee > investment.highWaterMark) {
       highWaterMark = usdAmountNetOfManagementFee;
@@ -1021,12 +1180,47 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
       usdPerformanceFee = (usdGainAboveHighWatermark * performanceFee) / 10000;
       fundPerformanceFee = _calcFundAmount(usdPerformanceFee);
     }
+  }
+
+  function _processFeesOnInvestment(
+    uint256 investmentId,
+    bool enforceFeeTimelock
+  ) internal onlyValidInvestmentId(investmentId) {
+    (
+      uint256 usdManagementFee,
+      uint256 fundManagementFee,
+      uint256 usdPerformanceFee,
+      uint256 fundPerformanceFee,
+      uint256 highWaterMark
+    ) = _calcFees(investmentId, enforceFeeTimelock);
+    Investment storage investment = investments[investmentId];
+    if (investment.investor == manager) {
+      _burn(address(this), fundManagementFee);
+    } else {
+      _burn(investment.investor, fundManagementFee);
+    }
+    _mint(address(this), fundManagementFee);
+    if (investment.investor == manager) {
+      _burn(address(this), fundPerformanceFee);
+    } else {
+      _burn(investment.investor, fundPerformanceFee);
+    }
+    _mint(address(this), fundPerformanceFee);
     uint256 feeSweepId = feeSweeps.length;
+    uint256 fundAmount = fundManagementFee + fundPerformanceFee;
+    investment.remainingFundAmount -= fundAmount;
+    investment.usdManagementFeesSwept += usdManagementFee;
+    investment.usdPerformanceFeesSwept += usdPerformanceFee;
+    investment.fundManagementFeesSwept += fundManagementFee;
+    investment.fundPerformanceFeesSwept += fundPerformanceFee;
+    investment.highWaterMark = highWaterMark;
+    investment.feeSweepsCount++;
+    investment.feeSweepIds.push(feeSweepId);
     feeSweeps.push(
       FeeSweep({
         investor: investment.investor,
         investmentId: investmentId,
-        navId: navs.length - 1,
+        navId: navs.length - 1, // TODO: safety check?
         highWaterMark: highWaterMark,
         usdManagementFee: usdManagementFee,
         usdPerformanceFee: usdPerformanceFee,
@@ -1056,6 +1250,10 @@ contract FundV0 is Initializable, ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 r,
     bytes32 s
   ) public onlyManager {
+    if (fundAmount > feesSweptNotWithdrawn) {
+      revert NotEnoughFees();
+    }
+    feesSweptNotWithdrawn -= fundAmount;
     uint256 usdAmount = _calcUsdAmount(fundAmount);
     _burn(address(this), fundAmount);
     address to;
