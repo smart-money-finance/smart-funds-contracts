@@ -582,7 +582,10 @@ contract FundV0 is Initializable, ERC20Upgradeable, UUPSUpgradeable {
     if (investor == manager) {
       revert InvalidInvestor();
     }
-    if (!investorInfo[investor].whitelisted ) {
+    if (
+      investors.length <= investorInfo[investor].investorId ||
+      investors[investorInfo[investor].investorId] != investor
+    ) {
       investorInfo[investor].investorId = investors.length;
       investors.push(investor);
     }
