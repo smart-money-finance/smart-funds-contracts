@@ -97,7 +97,9 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
       contactInfo,
       tags,
       usingUsdToken,
-      msg.sender
+      msg.sender,
+      this,
+      usdToken
     );
     address fundAddress = address(fundProxy);
     funds.push(fundAddress);

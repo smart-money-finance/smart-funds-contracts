@@ -79,41 +79,43 @@ describe('Fund', () => {
     const UsdToken = await ethers.getContractFactory('TestUSDCoin');
     const usdTokenContract = await UsdToken.deploy();
     await usdTokenContract.deployed();
+    // usdToken = usdTokenContract as TestUSDCoin;
     usdToken = TestUSDCoin__factory.connect(usdTokenContract.address, owner);
 
-    const FundFactory = await ethers.getContractFactory('FundV0');
-    const fundProxy = await upgrades.deployProxy(FundFactory, {
-      kind: 'uups',
-      initializer: false,
-    });
-    await fundProxy.deployed();
+    // const FundFactory = await ethers.getContractFactory('FundV0');
+    // const fundProxy = await upgrades.deployProxy(FundFactory, {
+    //   kind: 'uups',
+    //   initializer: false,
+    // });
+    // await fundProxy.deployed();
     // storage slot of implementation is
     // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))
     // see EIP-1967
-    const fundImplementationHex = await ethers.provider.getStorageAt(
-      fundProxy.address,
-      ethers.utils.hexValue(
-        ethers.BigNumber.from(
-          ethers.utils.keccak256(
-            ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
-          ),
-        ).sub(1),
-      ),
-    );
-    const fundImplementationAddress = ethers.utils.hexStripZeros(
-      fundImplementationHex,
-    );
+    // const fundImplementationHex = await ethers.provider.getStorageAt(
+    //   fundProxy.address,
+    //   ethers.utils.hexValue(
+    //     ethers.BigNumber.from(
+    //       ethers.utils.keccak256(
+    //         ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
+    //       ),
+    //     ).sub(1),
+    //   ),
+    // );
+    // const fundImplementationAddress = ethers.utils.hexStripZeros(
+    //   fundImplementationHex,
+    // );
 
-    const RegistryFactory = await ethers.getContractFactory('RegistryV0');
-    const Registry = await upgrades.deployProxy(
-      RegistryFactory,
-      [fundImplementationAddress, usdToken.address, false],
-      {
-        kind: 'uups',
-      },
-    );
-    await Registry.deployed();
-    registry = RegistryV0__factory.connect(Registry.address, owner);
+    // const RegistryFactory = await ethers.getContractFactory('RegistryV0');
+    // const Registry = await upgrades.deployProxy(
+    //   RegistryFactory,
+    //   [fundImplementationAddress, usdToken.address, false],
+    //   {
+    //     kind: 'uups',
+    //   },
+    // );
+    // await Registry.deployed();
+    // // registry = Registry as RegistryV0;
+    // registry = RegistryV0__factory.connect(Registry.address, owner);
 
     // initialize wallets with usdc
     await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100000', 6));
@@ -128,12 +130,26 @@ describe('Fund', () => {
       .faucet(ethers.utils.parseUnits('100000', 6));
   });
 
-  step('Should whitelist fund manager', async () => {
-    await registry.whitelistMulti([owner.address]);
-  });
+  // step('Should whitelist fund manager', async () => {
+  //   await registry.whitelistMulti([owner.address]);
+  // });
 
   step('Should create new fund', async () => {
-    const tx = await registry.newFund(
+    const FundFactory = await ethers.getContractFactory('FundV0');
+    const fundInstance = await FundFactory.deploy();
+    await fundInstance.deployed();
+    fund = FundV0__factory.connect(fundInstance.address, owner);
+    // const tx = await registry.newFund(
+    //   [owner.address, wallets[5].address],
+    //   [1, 200, 2000, 20, 5, 1, 1e6, 1e5, 0],
+    //   'Bobs cool fund',
+    //   'BCF',
+    //   'https://google.com/favicon.ico',
+    //   'bob@bob.com',
+    //   'Hedge Fund,Test Fund,Other tag',
+    //   true,
+    // );
+    await fund.initialize(
       [owner.address, wallets[5].address],
       [1, 200, 2000, 20, 5, 1, 1e6, 1e5, 0],
       'Bobs cool fund',
@@ -142,13 +158,17 @@ describe('Fund', () => {
       'bob@bob.com',
       'Hedge Fund,Test Fund,Other tag',
       true,
+      owner.address,
+      ethers.constants.AddressZero,
+      usdToken.address,
     );
 
-    const txResp = await tx.wait();
-    const fundAddress = txResp.events?.find(
-      (event: Event) => event.event === 'FundCreated',
-    )?.args?.fund;
-    fund = FundV0__factory.connect(fundAddress, owner);
+    // const txResp = await tx.wait();
+    // const fundAddress = txResp.events?.find(
+    //   (event: Event) => event.event === 'FundCreated',
+    // )?.args?.fund;
+    // fund = (await ethers.getContractAt('FundV0', fundAddress)) as FundV0;
+    // fund = FundV0__factory.connect(fundAddress, owner);
     // const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
     expect(await fund.initialPrice()).to.eq(1e5);
     await expect(fund.navs(0)).to.be.reverted; // no nav set yet

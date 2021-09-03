@@ -293,7 +293,9 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     string memory _contactInfo,
     string memory _tags,
     bool _usingUsdToken,
-    address _manager
+    address _manager,
+    RegistryV0 _registry,
+    ERC20Permit _usdToken
   ) public initializer {
     // called in order of inheritance, using _unchained version to avoid double calling
     __ERC1967Upgrade_init_unchained();
@@ -303,8 +305,10 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     __ERC20_init_unchained(name, symbol);
     // __ERC20Permit_init_unchained(name);
     // __ERC20Votes_init_unchained();
-    registry = RegistryV0(msg.sender);
-    usdToken = registry.usdToken();
+    // registry = RegistryV0(msg.sender);
+    registry = _registry;
+    // usdToken = registry.usdToken();
+    usdToken = _usdToken;
     manager = _manager;
     custodian = _manager;
     aumUpdater = addressParams[0];
