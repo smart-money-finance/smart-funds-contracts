@@ -673,6 +673,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
         processed: false
       })
     );
+    investorInfo[msg.sender].investmentRequestId = investmentRequestId;
     emit InvestmentRequested(
       msg.sender,
       investmentRequestId,
