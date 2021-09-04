@@ -1230,6 +1230,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     _mint(address(this), fundPerformanceFee);
     uint256 feeSweepId = feeSweeps.length;
     uint256 fundAmount = fundManagementFee + fundPerformanceFee;
+    feesSweptNotWithdrawn += fundAmount;
     investment.remainingFundAmount -= fundAmount;
     investment.usdManagementFeesSwept += usdManagementFee;
     investment.usdPerformanceFeesSwept += usdPerformanceFee;
