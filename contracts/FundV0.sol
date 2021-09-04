@@ -1181,7 +1181,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     if (
       enforceFeeTimelock &&
       (block.timestamp < lastSweepTimestamp + feeTimelock ||
-        lastSweepTimestamp >= lastFeeSweepEndedTimestamp)
+        lastSweepTimestamp < lastFeeSweepEndedTimestamp)
     ) {
       revert NotPastFeeTimelock(); // TODO: maybe a separate error to pass the specific investment id back?
     }
