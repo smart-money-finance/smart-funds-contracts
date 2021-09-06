@@ -10,8 +10,8 @@
       "runtimeArgs": ["hardhat", "test"],
       "runtimeExecutable": "yarn",
       "skipFiles": ["<node_internals>/**"],
-      "type": "pwa-node",
-      "outputCapture": "console"
+      "type": "node",
+      "console": "integratedTerminal"
     }
   ]
 }
