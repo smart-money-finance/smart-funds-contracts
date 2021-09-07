@@ -609,41 +609,39 @@ describe('Fund', () => {
     console.log(navLength);
     console.log(investmentLength);
     const investment = await fund.investments(0);
-    // console.log(investment);
+    console.log(investment);
 
     const investmentTimestamp = investment.constants.timestamp;
+    console.log(investmentTimestamp);
     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
-    const fundAmountBefore = await fund.balanceOf(wallets[2].address);
+    const fundAmountBefore = await fund.balanceOf(wallets[4].address);
     await network.provider.request({
       method: 'evm_increaseTime',
       params: [timeSkip],
     });
-    await fund.processFees([0]);
-    // const feeTimestamp = (await ethers.provider.getBlock('latest')).timestamp;
-    // const mgmtFeeFundToken = ethers.BigNumber.from(feeTimestamp)
-    //   .sub(investmentTimestamp.toString())
-    //   .div('31557600')
-    //   .mul('0.02')
-    //   .mul(fundAmountBefore.toString());
+    await fund.processFees([1]);
+    const feeTimestamp = (await ethers.provider.getBlock('latest')).timestamp;
+    const mgmtFeeFundToken = ethers.BigNumber.from(feeTimestamp)
+      .sub(investmentTimestamp.toString())
+      .div('31557600')
+      .mul('2')
+      .div('100')
+      .mul(fundAmountBefore.toString());
     // const navLength = await fund.navsLength();
-    // const mgmtFeeUsd = ethers.BigNumber.from(
-    //   (await fund.navs(navLength.sub(1))).toString(),
-    // )
-    //   .mul(mgmtFeeFundToken)
-    //   .div((await fund.totalSupply()).toString());
+    const nav = await fund.navs(navLength.sub(1));
+    const mgmtFeeUsd = ethers.BigNumber.from(nav.totalCapitalContributed)
+      .mul(mgmtFeeFundToken)
+      .div(await fund.totalSupply());
     // // check usd balance of the fund
-    // expect((await usdToken.balanceOf(fund.address)).toString()).to.eq(
-    //   mgmtFeeUsd,
-    //   // .toFixed(0, ethers.BigNumber.ROUND_DOWN),
-    // );
-    // // check fund balance of the investor
-    // expect((await fund.balanceOf(wallets[2].address)).toString()).to.eq(
-    //   ethers.BigNumber.from(fundAmountBefore.toString()).sub(
-    //     mgmtFeeFundToken,
-    //     // .toFixed(0, BigNumber.ROUND_DOWN)
-    //   ),
-    //   // .toFixed(0, BigNumber.ROUND_DOWN)
-    // );
+    expect(await usdToken.balanceOf(fund.address)).to.eq(mgmtFeeUsd);
+    const investmentAfter = await fund.investments(1);
+    console.log(investmentAfter);
+    // check fund balance of the investor
+    expect((await fund.balanceOf(wallets[4].address)).toString()).to.eq(
+      ethers.BigNumber.from(fundAmountBefore)
+        .sub(mgmtFeeFundToken)
+        .sub(investmentAfter.fundPerformanceFeesSwept),
+    );
   });
 
   // step('Should update AUM', async () => {
