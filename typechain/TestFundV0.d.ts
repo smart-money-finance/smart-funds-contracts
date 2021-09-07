@@ -2195,7 +2195,7 @@ export class TestFundV0 extends BaseContract {
     >;
 
     FeesWithdrawn(
-      feeWithdrawalId?: null,
+      feeWithdrawalId?: BigNumberish | null,
       to?: null,
       fundAmount?: null,
       usdAmount?: null,

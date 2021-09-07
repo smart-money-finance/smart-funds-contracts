@@ -151,7 +151,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
   FeeWithdrawal[] public feeWithdrawals; // append only, existing data is never modified
   uint256 public feesSweptNotWithdrawn; // total count of fund tokens swept that hasn't yet been withdrawn, this is to ensure the manager doesn't withdraw fund tokens from his own investments
   event FeesWithdrawn(
-    uint256 feeWithdrawalId,
+    uint256 indexed feeWithdrawalId,
     address to,
     uint256 fundAmount,
     uint256 usdAmount,
