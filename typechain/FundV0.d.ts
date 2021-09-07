@@ -57,6 +57,7 @@ interface FundV0Interface extends ethers.utils.Interface {
     "initialize(address[2],uint256[9],string,string,string,string,string,bool,address,address,address)": FunctionFragment;
     "investmentRequests(uint256)": FunctionFragment;
     "investments(uint256)": FunctionFragment;
+    "investmentsLength()": FunctionFragment;
     "investmentsSweptSinceStarted()": FunctionFragment;
     "investorCount()": FunctionFragment;
     "investorInfo(address)": FunctionFragment;
@@ -266,6 +267,10 @@ interface FundV0Interface extends ethers.utils.Interface {
   encodeFunctionData(
     functionFragment: "investments",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "investmentsLength",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "investmentsSweptSinceStarted",
@@ -500,6 +505,10 @@ interface FundV0Interface extends ethers.utils.Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "investments",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "investmentsLength",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -1007,6 +1016,8 @@ export class FundV0 extends BaseContract {
       }
     >;
 
+    investmentsLength(overrides?: CallOverrides): Promise<[BigNumber]>;
+
     investmentsSweptSinceStarted(
       overrides?: CallOverrides
     ): Promise<[BigNumber]>;
@@ -1480,6 +1491,8 @@ export class FundV0 extends BaseContract {
     }
   >;
 
+  investmentsLength(overrides?: CallOverrides): Promise<BigNumber>;
+
   investmentsSweptSinceStarted(overrides?: CallOverrides): Promise<BigNumber>;
 
   investorCount(overrides?: CallOverrides): Promise<BigNumber>;
@@ -1948,6 +1961,8 @@ export class FundV0 extends BaseContract {
         redeemed: boolean;
       }
     >;
+
+    investmentsLength(overrides?: CallOverrides): Promise<BigNumber>;
 
     investmentsSweptSinceStarted(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -2572,6 +2587,8 @@ export class FundV0 extends BaseContract {
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
+    investmentsLength(overrides?: CallOverrides): Promise<BigNumber>;
+
     investmentsSweptSinceStarted(overrides?: CallOverrides): Promise<BigNumber>;
 
     investorCount(overrides?: CallOverrides): Promise<BigNumber>;
@@ -2896,6 +2913,8 @@ export class FundV0 extends BaseContract {
       arg0: BigNumberish,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
+
+    investmentsLength(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     investmentsSweptSinceStarted(
       overrides?: CallOverrides
