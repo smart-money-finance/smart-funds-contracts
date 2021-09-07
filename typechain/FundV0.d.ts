@@ -607,19 +607,20 @@ interface FundV0Interface extends ethers.utils.Interface {
     "BeaconUpgraded(address)": EventFragment;
     "Blacklisted(address)": EventFragment;
     "Closed()": EventFragment;
+    "DoneImportingInvestments()": EventFragment;
     "FeeBeneficiaryChanged(address)": EventFragment;
     "FeeSweepEnded()": EventFragment;
     "FeeSweepStarted()": EventFragment;
     "FeesChanged(uint256,uint256)": EventFragment;
     "FeesSwept(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)": EventFragment;
-    "FeesWithdrawn(address,uint256,uint256,bool)": EventFragment;
+    "FeesWithdrawn(uint256,address,uint256,uint256,bool)": EventFragment;
     "FundDetailsChanged(string,string,string)": EventFragment;
     "Invested(address,uint256,uint256,uint256,uint256,bool,uint256,uint256,uint256)": EventFragment;
     "InvestmentRequestCanceled(address,uint256)": EventFragment;
     "InvestmentRequested(address,uint256,uint256,uint256,uint256,uint256)": EventFragment;
     "InvestorLimitsChanged(uint256,uint256,uint256,uint256)": EventFragment;
     "NavUpdated(uint256,uint256,uint256,uint256,string)": EventFragment;
-    "Redeemed(address,uint256,uint256,uint256,uint256,bool)": EventFragment;
+    "Redeemed(address,uint256,uint256,uint256,uint256,uint256,bool)": EventFragment;
     "RedemptionRequestCanceled(address,uint256,uint256)": EventFragment;
     "RedemptionRequested(address,uint256,uint256,uint256,uint256)": EventFragment;
     "Transfer(address,address,uint256)": EventFragment;
@@ -633,6 +634,7 @@ interface FundV0Interface extends ethers.utils.Interface {
   getEvent(nameOrSignatureOrTopic: "BeaconUpgraded"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Blacklisted"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Closed"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "DoneImportingInvestments"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "FeeBeneficiaryChanged"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "FeeSweepEnded"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "FeeSweepStarted"): EventFragment;
@@ -2142,6 +2144,8 @@ export class FundV0 extends BaseContract {
 
     Closed(): TypedEventFilter<[], {}>;
 
+    DoneImportingInvestments(): TypedEventFilter<[], {}>;
+
     FeeBeneficiaryChanged(
       feeBeneficiary?: null
     ): TypedEventFilter<[string], { feeBeneficiary: string }>;
@@ -2161,7 +2165,7 @@ export class FundV0 extends BaseContract {
     FeesSwept(
       investor?: string | null,
       investmentId?: BigNumberish | null,
-      feeSweepId?: null,
+      feeSweepId?: BigNumberish | null,
       highWaterMark?: null,
       usdManagementFee?: null,
       usdPerformanceFee?: null,
@@ -2191,13 +2195,15 @@ export class FundV0 extends BaseContract {
     >;
 
     FeesWithdrawn(
+      feeWithdrawalId?: null,
       to?: null,
       fundAmount?: null,
       usdAmount?: null,
       usdTransferred?: null
     ): TypedEventFilter<
-      [string, BigNumber, BigNumber, boolean],
+      [BigNumber, string, BigNumber, BigNumber, boolean],
       {
+        feeWithdrawalId: BigNumber;
         to: string;
         fundAmount: BigNumber;
         usdAmount: BigNumber;
@@ -2311,15 +2317,17 @@ export class FundV0 extends BaseContract {
     Redeemed(
       investor?: string | null,
       investmentId?: BigNumberish | null,
-      redemptionRequestId?: BigNumberish | null,
+      redemptionId?: BigNumberish | null,
+      redemptionRequestId?: null,
       fundAmount?: null,
       usdAmount?: null,
       usdTransferred?: null
     ): TypedEventFilter<
-      [string, BigNumber, BigNumber, BigNumber, BigNumber, boolean],
+      [string, BigNumber, BigNumber, BigNumber, BigNumber, BigNumber, boolean],
       {
         investor: string;
         investmentId: BigNumber;
+        redemptionId: BigNumber;
         redemptionRequestId: BigNumber;
         fundAmount: BigNumber;
         usdAmount: BigNumber;
