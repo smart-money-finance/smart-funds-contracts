@@ -334,7 +334,6 @@ describe('Fund', () => {
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,
-      processed: true,
       investmentId: ethers.BigNumber.from(0),
     });
     expect(investment.highWaterMark).to.eq(aumAfter);

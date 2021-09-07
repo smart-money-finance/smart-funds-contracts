@@ -96,7 +96,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     // redemption related variables
     uint256 redemptionRequestId; // id of current redemption request or max uint if no request
     uint256 redemptionId; // id of redemption if redeemed, otherwise max uint
-    bool redeemed;
   }
   Investment[] public investments;
   uint256 public activeInvestmentCount; // number of open investments
@@ -166,7 +165,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 deadline; // must be processed by deadline or revert
     uint256 timestamp;
     uint256 investmentId; // max uint until request is processed and an investment is made
-    bool processed;
   }
   InvestmentRequest[] public investmentRequests; // append only, existing data is never modified except for investmentId and processed if succeeded
   event InvestmentRequested(
@@ -187,8 +185,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 minUsdAmount; // min usd amount to net after fees
     uint256 deadline;
     uint256 timestamp;
-    uint256 redemptionId;
-    bool processed;
+    uint256 redemptionId; // max uint until request is processed and a redemption happens
   }
   RedemptionRequest[] public redemptionRequests; // append only, existing data is never modified except for processed
   event RedemptionRequested(
@@ -692,8 +689,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
         maxFundAmount: maxFundAmount,
         deadline: deadline,
         timestamp: block.timestamp,
-        investmentId: type(uint256).max,
-        processed: false
+        investmentId: type(uint256).max
       })
     );
     investorInfo[msg.sender].investmentRequestId = investmentRequestId;
@@ -833,7 +829,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       false,
       ''
     );
-    investmentRequest.processed = true;
     investmentRequest.investmentId = investments.length - 1;
     investorInfo[investmentRequest.investor].investmentRequestId = type(uint256)
       .max;
@@ -901,7 +896,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     if (investment.constants.investor != msg.sender) {
       revert NotInvestmentOwner();
     }
-    if (investment.redeemed) {
+    if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
     }
     if (investment.constants.lockupTimestamp + timelock > block.timestamp) {
@@ -921,7 +916,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
         minUsdAmount: minUsdAmount,
         deadline: deadline,
         timestamp: block.timestamp,
-        processed: false,
         redemptionId: type(uint256).max
       })
     );
@@ -942,7 +936,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     if (investment.constants.investor != msg.sender) {
       revert NotInvestmentOwner();
     }
-    if (investment.redeemed) {
+    if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
     }
     uint256 currentRedemptionRequestId = investment.redemptionRequestId;
@@ -981,7 +975,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       investment.remainingFundAmount
     );
     uint256 redemptionId = redemptions.length;
-    investment.redeemed = true;
     investment.redemptionId = redemptionId;
     activeInvestmentCount--;
     investorInfo[investment.constants.investor].activeInvestmentCount--;
@@ -1055,7 +1048,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       redemptionRequestId
     ];
     Investment storage investment = investments[redemptionRequest.investmentId];
-    if (investment.redeemed) {
+    if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
     }
     if (investment.redemptionRequestId != redemptionRequestId) {
@@ -1096,7 +1089,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     if (investment.constants.investor == manager && transferUsd) {
       revert CannotTransferUsdToManager();
     }
-    if (investment.redeemed) {
+    if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
     }
     uint256 redemptionRequestId = investment.redemptionRequestId;
