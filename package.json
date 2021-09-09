@@ -6,7 +6,8 @@
     "test": "hardhat test",
     "deploy-rinkeby": "hardhat --network rinkeby run scripts/deploy/1_v1.ts",
     "deploy-mumbai": "hardhat --network mumbai run scripts/deploy/1_v1.ts",
-    "deploy-polygon": "hardhat --network polygon run scripts/deploy/1_v1.ts"
+    "deploy-polygon": "hardhat --network polygon run scripts/deploy/1_v1.ts",
+    "filter-abis": "ts-node scripts/filter-errors-from-artifact-abis.ts"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
