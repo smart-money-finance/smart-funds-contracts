@@ -391,100 +391,89 @@ describe('Fund', () => {
     // await debug();
   });
 
-  // describe('Should revert when on certain conditions', () => {
-  //   let feesFundAmount: BigNumberish;
-  //   let usdAmount: BigNumberish;
-  //   let signature: Signature;
+  describe('Should revert when on certain conditions', () => {
+    let feesFundAmount: BigNumberish;
+    let usdAmount: BigNumberish;
+    let signature: Signature;
 
-  //   beforeEach(async () => {
-  //     feesFundAmount = await fund.balanceOf(fund.address);
-  //     const navLength = await fund.navsLength();
-  //     const nav = await fund.navs(navLength.sub(1));
-  //     usdAmount = feesFundAmount.mul(nav.aum).div(await fund.totalSupply());
-  //     signature = await signPermit(
-  //       owner,
-  //       usdToken,
-  //       network.config.chainId || 1,
-  //       fund.address,
-  //       usdAmount,
-  //       ethers.constants.MaxUint256,
-  //     );
-  //     console.log(feesFundAmount);
-  //     console.log(usdAmount);
-  //   });
+    before(async () => {
+      feesFundAmount = await fund.balanceOf(fund.address);
+      const navLength = await fund.navsLength();
+      const nav = await fund.navs(navLength.sub(1));
+      usdAmount = feesFundAmount.mul(nav.aum).div(await fund.totalSupply());
+      signature = await signPermit(
+        owner,
+        usdToken,
+        network.config.chainId || 1,
+        fund.address,
+        usdAmount,
+        ethers.constants.MaxUint256,
+      );
+      console.log(feesFundAmount);
+      console.log(usdAmount);
+    });
 
-  //   it('should revert with not enough fees ', async () => {
-  //     const tx = await fund.withdrawFees(
-  //       feesFundAmount,
-  //       true,
-  //       usdAmount,
-  //       ethers.constants.MaxUint256,
-  //       signature.v,
-  //       signature.r,
-  //       signature.s,
-  //     );
-  //     await expect(
-  //       fund.withdrawFees(
-  //         feesFundAmount,
-  //         true,
-  //         usdAmount,
-  //         ethers.constants.MaxUint256,
-  //         signature.v,
-  //         signature.r,
-  //         signature.s,
-  //       ),
-  //     ).to.be.revertedWith('NotEnoughFees');
-  //   });
+    it('should revert with not enough fees ', async () => {
+      // TODO: Should this be allowed before processfees?
+      const tx = await fund.withdrawFees(
+        feesFundAmount,
+        true,
+        usdAmount,
+        ethers.constants.MaxUint256,
+        signature.v,
+        signature.r,
+        signature.s,
+      );
+      await expect(
+        fund.withdrawFees(
+          feesFundAmount,
+          true,
+          usdAmount,
+          ethers.constants.MaxUint256,
+          signature.v,
+          signature.r,
+          signature.s,
+        ),
+      ).to.be.revertedWith('NotEnoughFees');
+    });
 
-  //   it('should return invalid zero amount revert', async () => {
-  //     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
-  //     console.log(timestamp);
-  //     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
-  //     await network.provider.send('evm_increaseTime', [timeSkip]);
-  //     await network.provider.send('evm_mine');
-  //     const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
-  //     console.log(timestamp2);
-  //     await fund.processFees([1]);
-  //     await expect(
-  //       fund.withdrawFees(
-  //         feesFundAmount,
-  //         true,
-  //         usdAmount,
-  //         ethers.constants.MaxUint256,
-  //         signature.v,
-  //         signature.r,
-  //         signature.s,
-  //       ),
-  //     ).to.be.revertedWith('InvalidAmountReturnedZero');
-  //     // await fund.processFees([0]);
-  //     // await fund.withdrawFees(
-  //     //   feesFundAmount,
-  //     //   true,
-  //     //   usdAmount,
-  //     //   ethers.constants.MaxUint256,
-  //     //   signature.v,
-  //     //   signature.r,
-  //     //   signature.s,
-  //     // );
-  //   });
+    it('should revert when fees are tried to be withdrawn before a full fee processing', async () => {
+      const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
+      console.log(timestamp);
+      const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+      await network.provider.send('evm_increaseTime', [timeSkip]);
+      await network.provider.send('evm_mine');
+      const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
+      console.log(timestamp2);
+      await fund.processFees([0]);
+      await expect(
+        fund.withdrawFees(
+          feesFundAmount,
+          true,
+          usdAmount,
+          ethers.constants.MaxUint256,
+          signature.v,
+          signature.r,
+          signature.s,
+        ),
+      ).to.be.revertedWith('FeeSweeping');
+      await fund.processFees([1]);
+      await fund.withdrawFees(
+        feesFundAmount,
+        true,
+        usdAmount,
+        ethers.constants.MaxUint256,
+        signature.v,
+        signature.r,
+        signature.s,
+      );
+    });
 
-  //   it('should revert before timelock', async () => {
-  //     await expect(fund.processFees([0])).to.be.revertedWith(
-  //       'NotPastFeeTimelock',
-  //     );
-  //   });
-  // });
-
-  step('should revert before timelock', async () => {
-    await expect(fund.processFees([0])).to.be.revertedWith(
-      'NotPastFeeTimelock',
-    );
-  });
-
-  step('should revert before timelock', async () => {
-    await expect(fund.processFees([0])).to.be.revertedWith(
-      'NotPastFeeTimelock',
-    );
+    it('should revert before timelock', async () => {
+      await expect(fund.processFees([0])).to.be.revertedWith(
+        'NotPastFeeTimelock',
+      );
+    });
   });
 
   step('Should withdraw accrued fees', async () => {
