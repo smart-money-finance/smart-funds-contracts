@@ -50,6 +50,7 @@ async function main() {
     registry: Registry.address,
     unusedFundProxy: fundProxy.address,
     existingUsdToken: usdTokenAddress,
+    registryDeployBlockNumber: Registry.deployTransaction.blockNumber,
   });
 }
 
