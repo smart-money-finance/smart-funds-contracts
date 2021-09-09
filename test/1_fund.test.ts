@@ -142,7 +142,7 @@ describe('Fund upgradeability', () => {
     fund = FundV0__factory.connect(fundInstance.address, owner);
     const tx = await registry.newFund(
       [owner.address, wallets[5].address],
-      [1, 200, 2000, 20, 5, 1, 1e6, 1e5, 0],
+      [1, 200, 2000, 20, 5, 10, 1e6, 1e5, 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -209,7 +209,7 @@ describe('Fund', () => {
 
     await fund.initialize(
       [owner.address, wallets[5].address],
-      [1, 200, 2000, 20, 5, 1, 1e6, 1e5, 0],
+      [1, 200, 2000, 20, 10, 10, 1e6, 1e5, 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -718,22 +718,37 @@ describe('Fund', () => {
     expect(nav.aum).to.eq(newAUM);
   });
 
-  // step('Should Process redemption requests', async function () {
-  //   const amountToInvest = ethers.utils.parseUnits('10000', 6);
+  step('Should Process redemption requests', async function () {
+    const amountToInvest = ethers.utils.parseUnits('5000', 6);
+    await fund.addManualInvestment(wallets[6].address, amountToInvest, '');
+    await fund.addManualInvestment(wallets[7].address, amountToInvest, '');
+    await fund.addManualInvestment(wallets[8].address, amountToInvest, '');
 
-  //   await usdToken
-  //     .connect(wallets[4])
-  //     .approve(fund.address, ethers.constants.MaxUint256);
-  //   await fund
-  //     .connect(wallets[4])
-  //     .invest(amountToInvest, '1', ethers.constants.MaxUint256);
-
-  //   await debug();
-  //   await fund.processRedemptions([1], '1', ethers.constants.MaxUint256);
-  //   await debug();
-  //   await fund.processRedemptions([2], '1', ethers.constants.MaxUint256);
-  //   await debug();
-  // });
+    // await debug();
+    const investmentLength = (await fund.investmentsLength()).toNumber();
+    for (var i = investmentLength - 1; i > investmentLength - 3 - 1; i--) {
+      const permitAmount = await fund.redemptionUsdAmount(i);
+      console.log(permitAmount);
+      const signature = await signPermit(
+        owner,
+        usdToken,
+        network.config.chainId || 1,
+        fund.address,
+        permitAmount,
+        ethers.constants.MaxUint256,
+      );
+      await fund.addManualRedemption(
+        i,
+        true,
+        permitAmount,
+        ethers.constants.MaxUint256,
+        signature.v,
+        signature.r,
+        signature.s,
+      );
+      expect(await fund.activeInvestmentCount()).to.eq(investmentLength - 3);
+    }
+  });
 
   // step('Should close fund', async function () {
   //   await debug();
