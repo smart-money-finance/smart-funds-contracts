@@ -106,10 +106,12 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 indexed investmentRequestId,
     uint256 usdAmount,
     uint256 fundAmount,
-    bool imported,
     uint256 initialHighWaterMark,
     uint256 managementFeeCostBasis,
-    uint256 lockupTimestamp
+    uint256 lockupTimestamp,
+    bool imported,
+    bool usdTransferred,
+    string notes
   );
   event DoneImportingInvestments();
 
@@ -770,10 +772,12 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       investmentRequestId,
       usdAmount,
       fundAmount,
-      imported,
       highWaterMark,
       managementFeeCostBasis,
-      lockupTimestamp
+      lockupTimestamp,
+      imported,
+      transferUsd,
+      notes
     );
     uint256 newAum = usdAmount;
     uint256 newTotalCapitalContributed = usdAmount;
