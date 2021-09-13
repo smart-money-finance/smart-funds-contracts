@@ -1169,7 +1169,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     } else {
       lastSweepTimestamp = investment.constants.timestamp;
     }
-
     // calc management fee
     usdManagementFee =
       (investment.constants.managementFeeCostBasis *
@@ -1205,10 +1204,14 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       uint256 highWaterMark,
       uint256 lastSweepTimestamp
     ) = _calcFees(investmentId);
-    if (lastSweepTimestamp > _lastFeeSweepEndedTimestamp) {
+    Investment storage investment = _investments[investmentId];
+    // if this investment previously had a sweep and it happened later than the most recent sweep period ended, then revert to avoid double sweeping
+    if (
+      investment.feeSweepsCount > 0 &&
+      lastSweepTimestamp > _lastFeeSweepEndedTimestamp
+    ) {
       revert AlreadySweepedThisPeriod();
     }
-    Investment storage investment = _investments[investmentId];
     address burnFrom = investment.constants.investor;
     if (burnFrom == _manager) {
       burnFrom = address(this);
