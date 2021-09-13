@@ -52,6 +52,7 @@ task(TASK_COMPILE, async function (taskArguments, hre, runSuper) {
 
 const config: HardhatUserConfig = {
   networks: {
+    hardhat: { allowUnlimitedContractSize: true },
     rinkeby: {
       url: `https://rinkeby.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
