@@ -121,4 +121,56 @@ contract TestFundV0 is FundV0 {
   function investorsLength() public view returns (uint256) {
     return _investors.length;
   }
+
+  function manager() public view returns (address) {
+    return _manager;
+  }
+
+  function custodian() public view returns (address) {
+    return _custodian;
+  }
+
+  function aumUpdater() public view returns (address) {
+    return _aumUpdater;
+  }
+
+  function feeBeneficiary() public view returns (address) {
+    return _feeBeneficiary;
+  }
+
+  function timelock() public view returns (uint256) {
+    return _timelock;
+  }
+
+  function feeSweepInterval() public view returns (uint256) {
+    return _feeSweepInterval;
+  }
+
+  function managementFee() public view returns (uint256) {
+    return _managementFee;
+  }
+
+  function performanceFee() public view returns (uint256) {
+    return _performanceFee;
+  }
+
+  function maxInvestors() public view returns (uint256) {
+    return _maxInvestors;
+  }
+
+  function maxInvestmentsPerInvestor() public view returns (uint256) {
+    return _maxInvestmentsPerInvestor;
+  }
+
+  function minInvestmentAmount() public view returns (uint256) {
+    return _minInvestmentAmount;
+  }
+
+  function initialPrice() public view returns (uint256) {
+    return _initialPrice;
+  }
+
+  function usingUsdToken() public view returns (bool) {
+    return _usingUsdToken;
+  }
 }
