@@ -695,16 +695,12 @@ describe('Fund', () => {
     const investmentAfter = await fund.investments(1);
 
     // check fund balance of the investor
-    const errDelta = 5;
-    expect(
-      (await fund.balanceOf(investment.constants.investor)).toString(),
-    ).to.closeTo(
+    expect(await fund.balanceOf(investment.constants.investor)).to.eq(
       ethers.BigNumber.from(fundAmountBefore)
         .sub(investmentAfter.fundManagementFeesSwept)
         .sub(investmentAfter.fundPerformanceFeesSwept)
         .add(investment.fundManagementFeesSwept)
         .add(investment.fundPerformanceFeesSwept),
-      errDelta,
     );
 
     // expect(await fund.balanceOf(investment.constants.investor)).to.eq(
