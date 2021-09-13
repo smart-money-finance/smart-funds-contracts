@@ -332,6 +332,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       uint256 fundAmount = _calcFundAmount(usdAmount);
       _addInvestment(
         manager,
+        block.timestamp,
         usdAmount,
         fundAmount,
         block.timestamp,
@@ -500,9 +501,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
       // use initial price
       fundAmount = usdAmount / initialPrice;
     }
-    if (fundAmount == 0) {
-      revert InvalidAmountReturnedZero();
-    }
   }
 
   function _calcUsdAmount(uint256 fundAmount)
@@ -517,9 +515,6 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     } else {
       // use initial price
       usdAmount = fundAmount * initialPrice;
-    }
-    if (usdAmount == 0) {
-      revert InvalidAmountReturnedZero();
     }
   }
 
@@ -717,6 +712,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
 
   function _addInvestment(
     address investor,
+    uint256 timestamp,
     uint256 usdAmount,
     uint256 fundAmount,
     uint256 lockupTimestamp,
@@ -727,6 +723,9 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     bool imported,
     string memory notes
   ) internal notFeeSweeping {
+    if (usdAmount == 0 || fundAmount == 0) {
+      revert InvalidAmountReturnedZero();
+    }
     if (
       investorInfo[investor].activeInvestmentCount >= maxInvestmentsPerInvestor
     ) {
@@ -741,7 +740,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     {
       Investment storage investment = investments.push();
       investment.constants.investor = investor;
-      investment.constants.timestamp = block.timestamp;
+      investment.constants.timestamp = timestamp;
       investment.constants.lockupTimestamp = lockupTimestamp;
       investment.constants.initialUsdAmount = usdAmount;
       investment.constants.initialFundAmount = fundAmount;
@@ -823,6 +822,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     }
     _addInvestment(
       investmentRequest.investor,
+      block.timestamp,
       investmentRequest.usdAmount,
       fundAmount,
       block.timestamp,
@@ -849,6 +849,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 fundAmount = _calcFundAmount(usdAmount);
     _addInvestment(
       investor,
+      block.timestamp,
       usdAmount,
       fundAmount,
       block.timestamp,
@@ -867,6 +868,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 lockupTimestamp,
     uint256 highWaterMark,
     uint256 originalUsdAmount,
+    uint256 lastFeeSweepTimestamp,
     string calldata notes
   ) public notClosed onlyManager notDoneImporting {
     if (!investorInfo[investor].whitelisted) {
@@ -875,6 +877,7 @@ contract FundV0 is ERC20Upgradeable, UUPSUpgradeable {
     uint256 fundAmount = _calcFundAmount(usdAmountRemaining);
     _addInvestment(
       investor,
+      lastFeeSweepTimestamp,
       usdAmountRemaining,
       fundAmount,
       lockupTimestamp,

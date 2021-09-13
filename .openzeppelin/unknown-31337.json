@@ -8,19 +8,19 @@
     },
     {
       "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      "txHash": "0x4316c636244b642f3cd0f3b94a793891a118aecba97650f28764b7bb35fe14fa",
+      "txHash": "0x820dfb218c5e3ce1732aa5450314e3a7fe6245cede3c3b4fa6b9d37f252d1d2e",
       "kind": "uups"
     },
     {
       "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-      "txHash": "0x0a6ccf841c49ea7b1f0f9245055efe5dde6bb4155f4188277d40880e3b45864e",
+      "txHash": "0x4f30da8af79bef56c647ce0b4e1eb4ad2efff754c4462d9e5625bd1860bc4da7",
       "kind": "uups"
     }
   ],
   "impls": {
     "9a5700fd41fe5fd0d0d38f8a93a733bd48e44f70767623abc529151bb559f3d6": {
       "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-      "txHash": "0x3a41512eb423a5736a1d6afdcd71f810b3bcb6d041029b0379be82e2ceed0137",
+      "txHash": "0xaa4c87b31cea61acae43943d57525268e4ea4a1cff24910a2e71a3eabb49fb27",
       "layout": {
         "storage": [
           {
@@ -80,7 +80,7 @@
           {
             "contract": "RegistryV0",
             "label": "fundImplementations",
-            "type": "t_array(t_contract(FundV0)9416)dyn_storage",
+            "type": "t_array(t_contract(FundV0)9422)dyn_storage",
             "src": "contracts/RegistryV0.sol:22"
           },
           {
@@ -115,10 +115,10 @@
           "t_uint256": {
             "label": "uint256"
           },
-          "t_array(t_contract(FundV0)9416)dyn_storage": {
+          "t_array(t_contract(FundV0)9422)dyn_storage": {
             "label": "contract FundV0[]"
           },
-          "t_contract(FundV0)9416": {
+          "t_contract(FundV0)9422": {
             "label": "contract FundV0"
           },
           "t_array(t_address)dyn_storage": {
@@ -145,9 +145,9 @@
         }
       }
     },
-    "dd56e1c3cdb016ee154f44f4fa3d24e922ae4a374d0a26305723950afa455f35": {
+    "17ec2d0bbe91aeea6650e80d0a0c5dfd419dbf5a2ceeb5d0b14dda9400a15b5e": {
       "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-      "txHash": "0x82406f9a3a69890598dea1e9c4fac9f421726a3f967127ada058e8e3dd35c001",
+      "txHash": "0xdc96b8a3b399dd5aeb168d21153ac52516a50b749019b46f671484da87d4c8f9",
       "layout": {
         "storage": [
           {
@@ -219,7 +219,7 @@
           {
             "contract": "FundV0",
             "label": "registry",
-            "type": "t_contract(RegistryV0)9738",
+            "type": "t_contract(RegistryV0)9744",
             "src": "contracts/FundV0.sol:21"
           },
           {
@@ -428,7 +428,7 @@
           }
         ],
         "types": {
-          "t_contract(RegistryV0)9738": {
+          "t_contract(RegistryV0)9744": {
             "label": "contract RegistryV0"
           },
           "t_contract(ERC20Permit)4925": {
