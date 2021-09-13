@@ -668,7 +668,9 @@ describe('Fund', () => {
 
     const investmentTimestamp = investment.constants.timestamp;
     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
-    const fundAmountBefore = await fund.balanceOf(wallets[4].address);
+    const fundAmountBefore = await fund.balanceOf(
+      investment.constants.investor,
+    );
 
     await network.provider.request({
       method: 'evm_increaseTime',
@@ -681,7 +683,7 @@ describe('Fund', () => {
       .div('31557600')
       .mul('2')
       .div('100')
-      .mul(fundAmountBefore.toString());
+      .mul(investment.constants.managementFeeCostBasis);
 
     const mgmtFeeUsd = ethers.BigNumber.from(
       investment.constants.managementFeeCostBasis,
@@ -690,11 +692,13 @@ describe('Fund', () => {
       .div(await fund.totalSupply());
     // // check usd balance of the fund
     expect(await usdToken.balanceOf(fund.address)).to.eq(mgmtFeeUsd);
-    const investmentAfter = await fund.investments(1);
+    const investmentAfter = await fund.investments(0);
 
     // check fund balance of the investor
     const errDelta = 5;
-    expect((await fund.balanceOf(wallets[4].address)).toString()).to.closeTo(
+    expect(
+      (await fund.balanceOf(investment.constants.investor)).toString(),
+    ).to.closeTo(
       ethers.BigNumber.from(fundAmountBefore)
         .sub(investmentAfter.fundManagementFeesSwept)
         .sub(investmentAfter.fundPerformanceFeesSwept)
@@ -702,9 +706,12 @@ describe('Fund', () => {
         .add(investment.fundPerformanceFeesSwept),
       errDelta,
     );
-    // expect((await fund.balanceOf(wallets[4].address)).toString()).to.eq(
-    //   ethers.BigNumber.from(fundAmountBefore).sub(mgmtFeeFundCostBasisToken),
-    // );
+
+    expect(await fund.balanceOf(investment.constants.investor)).to.eq(
+      ethers.BigNumber.from(fundAmountBefore).sub(
+        await usdToken.balanceOf(fund.address),
+      ),
+    );
   });
 
   step('Should update AUM', async () => {
