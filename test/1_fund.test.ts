@@ -722,16 +722,15 @@ describe('Fund', () => {
   });
 
   step('Should Process redemption requests', async function () {
-    const amountToInvest = ethers.utils.parseUnits('5000', 6);
+    const amountToInvest = ethers.utils.parseUnits('1000', 6);
     await fund.addManualInvestment(wallets[6].address, amountToInvest, '');
     await fund.addManualInvestment(wallets[7].address, amountToInvest, '');
     await fund.addManualInvestment(wallets[8].address, amountToInvest, '');
-
     // await debug();
-    const investmentLength = (await fund.investmentsLength()).toNumber();
-    for (var i = investmentLength - 1; i > investmentLength - 3 - 1; i--) {
+    const activeInvestments = (await fund.activeInvestmentCount()).toNumber();
+    const investmentsLength = (await fund.investmentsLength()).toNumber();
+    for (var i = investmentsLength - 1; i > investmentsLength - 3 - 1; i--) {
       const permitAmount = await fund.redemptionUsdAmount(i);
-      console.log(permitAmount);
       const signature = await signPermit(
         owner,
         usdToken,
@@ -749,8 +748,8 @@ describe('Fund', () => {
         signature.r,
         signature.s,
       );
-      expect(await fund.activeInvestmentCount()).to.eq(investmentLength - 3);
     }
+    expect(await fund.activeInvestmentCount()).to.eq(activeInvestments - 3);
   });
 
   // step('Should close fund', async function () {
