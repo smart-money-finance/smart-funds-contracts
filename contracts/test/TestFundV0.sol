@@ -105,4 +105,20 @@ contract TestFundV0 is FundV0 {
   function closed() public view returns (bool) {
     return _closed;
   }
+
+  function investorInfo(address investor)
+    public
+    view
+    returns (Investor memory)
+  {
+    return _investorInfo[investor];
+  }
+
+  function investors(uint256 id) public view returns (address) {
+    return _investors[id];
+  }
+
+  function investorsLength() public view returns (uint256) {
+    return _investors.length;
+  }
 }

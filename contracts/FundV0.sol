@@ -57,13 +57,13 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
 
   struct Investor {
     bool whitelisted; // allowed to invest or not
-    uint256 investorId; // index in investors array
+    uint256 investorId; // index in _investors array
     uint256 activeInvestmentCount; // number of open investments to enforce maximum
     uint256 investmentRequestId; // id of open investment request, or max uint if none
     uint256[] investmentIds; // all investment ids, open or not
   }
-  mapping(address => Investor) public investorInfo;
-  address[] public investors; // append only list of investors, added to when whitelisted unless that investor has an investorId that matches, which means they were whitelisted and then blacklisted and they're already in this array
+  mapping(address => Investor) internal _investorInfo;
+  address[] internal _investors; // append only list of investors, added to when whitelisted unless that investor has an investorId that matches, which means they were whitelisted and then blacklisted and they're already in this array
   uint256 internal _investorCount; // count of currently whitelisted investors, for maintaining max limit
   event Whitelisted(address indexed investor);
   event Blacklisted(address indexed investor);
@@ -368,7 +368,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
   }
 
-  function _onlyManager() private view {
+  function _onlyManager() internal view {
     if (msg.sender != manager) {
       revert ManagerOnly();
     }
@@ -379,10 +379,14 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  modifier notManager() {
+  function _notManager() internal view {
     if (msg.sender == manager) {
       revert ManagerCannotCreateRequests();
     }
+  }
+
+  modifier notManager() {
+    _notManager();
     _;
   }
 
@@ -393,21 +397,29 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  modifier onlyWhitelisted() {
-    if (!investorInfo[msg.sender].whitelisted) {
+  function _onlyWhitelisted() internal view {
+    if (!_investorInfo[msg.sender].whitelisted) {
       revert WhitelistedOnly();
     }
+  }
+
+  modifier onlyWhitelisted() {
+    _onlyWhitelisted();
     _;
   }
 
-  modifier notFeeSweeping() {
+  function _notFeeSweeping() internal view {
     if (_feeSweeping) {
       revert FeeSweeping();
     }
+  }
+
+  modifier notFeeSweeping() {
+    _notFeeSweeping();
     _;
   }
 
-  function _notClosed() private view {
+  function _notClosed() internal view {
     if (_closed) {
       revert FundClosed();
     }
@@ -418,14 +430,18 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  modifier onlyUsingUsdToken() {
+  function _onlyUsingUsdToken() internal view {
     if (!usingUsdToken) {
       revert NotUsingUsdToken();
     }
+  }
+
+  modifier onlyUsingUsdToken() {
+    _onlyUsingUsdToken();
     _;
   }
 
-  function _onlyValidInvestmentId(uint256 investmentId) private view {
+  function _onlyValidInvestmentId(uint256 investmentId) internal view {
     if (investmentId >= _investments.length) {
       revert InvalidInvestmentId();
     }
@@ -443,11 +459,15 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  modifier stopImportingInvestments() {
+  function _stopImportingInvestments() internal {
     if (!_doneImportingInvestments) {
       _doneImportingInvestments = true;
       emit DoneImportingInvestments();
     }
+  }
+
+  modifier stopImportingInvestments() {
+    _stopImportingInvestments();
     _;
   }
 
@@ -509,31 +529,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     );
   }
 
-  function _addFeeWithdrawal(
-    address to,
-    uint256 fundAmount,
-    uint256 usdAmount,
-    bool usdTransferred
-  ) internal {
-    _feeWithdrawals.push(
-      FeeWithdrawal({
-        to: to,
-        fundAmount: fundAmount,
-        usdAmount: usdAmount,
-        usdTransferred: usdTransferred,
-        timestamp: block.timestamp
-      })
-    );
-    emit FeesWithdrawn(
-      _feeWithdrawals.length - 1,
-      to,
-      fundAmount,
-      usdAmount,
-      usdTransferred
-    );
-  }
-
-  function updateAum(uint256 _aum, string memory ipfsHash)
+  function updateAum(uint256 aum, string memory ipfsHash)
     public
     notClosed
     onlyAumUpdater
@@ -543,16 +539,16 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     if (_investments.length == 0) {
       revert NotActive(); // Fund cannot have AUM until the first investment is made
     }
-    _addNav(_aum, _navs[_navs.length - 1].totalCapitalContributed, ipfsHash);
+    _addNav(aum, _navs[_navs.length - 1].totalCapitalContributed, ipfsHash);
   }
 
-  function whitelistMulti(address[] memory _investors)
+  function whitelistMulti(address[] memory newInvestors)
     public
     notClosed
     onlyManager
   {
-    for (uint256 i = 0; i < _investors.length; i++) {
-      _addToWhitelist(_investors[i]);
+    for (uint256 i = 0; i < newInvestors.length; i++) {
+      _addToWhitelist(newInvestors[i]);
     }
   }
 
@@ -560,49 +556,49 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     if (_investorCount >= maxInvestors) {
       revert TooManyInvestors(); // Too many investors
     }
-    if (investorInfo[investor].whitelisted) {
+    if (_investorInfo[investor].whitelisted) {
       revert AlreadyWhitelisted();
     }
     if (investor == manager) {
       revert InvalidInvestor();
     }
     if (
-      investors.length <= investorInfo[investor].investorId ||
-      investors[investorInfo[investor].investorId] != investor
+      _investors.length <= _investorInfo[investor].investorId ||
+      _investors[_investorInfo[investor].investorId] != investor
     ) {
-      investorInfo[investor].investorId = investors.length;
-      investors.push(investor);
+      _investorInfo[investor].investorId = _investors.length;
+      _investors.push(investor);
     }
     _investorCount++;
-    investorInfo[investor].whitelisted = true;
-    investorInfo[investor].investmentRequestId = type(uint256).max;
+    _investorInfo[investor].whitelisted = true;
+    _investorInfo[investor].investmentRequestId = type(uint256).max;
     emit Whitelisted(investor);
   }
 
-  function blacklistMulti(address[] memory _investors)
+  function blacklistMulti(address[] memory blacklistedInvestors)
     public
     notClosed
     onlyManager
   {
-    for (uint256 i = 0; i < _investors.length; i++) {
-      address investor = _investors[i];
-      if (investorInfo[investor].activeInvestmentCount > 0) {
+    for (uint256 i = 0; i < blacklistedInvestors.length; i++) {
+      address investor = blacklistedInvestors[i];
+      if (_investorInfo[investor].activeInvestmentCount > 0) {
         revert InvestorIsActive();
       }
-      if (!investorInfo[investor].whitelisted) {
+      if (!_investorInfo[investor].whitelisted) {
         revert NotInvestor();
       }
       _investorCount--;
-      uint256 investmentRequestId = investorInfo[investor].investmentRequestId;
+      uint256 investmentRequestId = _investorInfo[investor].investmentRequestId;
       if (
         investmentRequestId != type(uint256).max &&
         _investmentRequests[investmentRequestId].investor == investor
       ) {
-        investorInfo[investor].investmentRequestId = type(uint256).max;
+        _investorInfo[investor].investmentRequestId = type(uint256).max;
         emit InvestmentRequestCanceled(msg.sender, investmentRequestId);
       }
-      investorInfo[investor].whitelisted = false;
-      emit Blacklisted(investors[i]);
+      _investorInfo[investor].whitelisted = false;
+      emit Blacklisted(investor);
     }
   }
 
@@ -620,12 +616,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   ) public onlyWhitelisted notManager {
     if (
       update &&
-      investorInfo[msg.sender].investmentRequestId == type(uint256).max
+      _investorInfo[msg.sender].investmentRequestId == type(uint256).max
     ) {
       revert NoExistingRequest();
     }
     if (
-      investorInfo[msg.sender].activeInvestmentCount >=
+      _investorInfo[msg.sender].activeInvestmentCount >=
       maxInvestmentsPerInvestor
     ) {
       revert MaxInvestmentsReached();
@@ -656,7 +652,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
         investmentId: type(uint256).max
       })
     );
-    investorInfo[msg.sender].investmentRequestId = investmentRequestId;
+    _investorInfo[msg.sender].investmentRequestId = investmentRequestId;
     emit InvestmentRequested(
       msg.sender,
       investmentRequestId,
@@ -668,12 +664,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   }
 
   function cancelInvestmentRequest() public {
-    uint256 currentInvestmentRequestId = investorInfo[msg.sender]
+    uint256 currentInvestmentRequestId = _investorInfo[msg.sender]
       .investmentRequestId;
     if (currentInvestmentRequestId == type(uint256).max) {
       revert NoExistingRequest();
     }
-    investorInfo[msg.sender].investmentRequestId = type(uint256).max;
+    _investorInfo[msg.sender].investmentRequestId = type(uint256).max;
     emit InvestmentRequestCanceled(msg.sender, currentInvestmentRequestId);
   }
 
@@ -694,7 +690,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       revert InvalidAmountReturnedZero();
     }
     if (
-      investorInfo[investor].activeInvestmentCount >= maxInvestmentsPerInvestor
+      _investorInfo[investor].activeInvestmentCount >= maxInvestmentsPerInvestor
     ) {
       revert MaxInvestmentsReached();
     }
@@ -730,8 +726,8 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       // investment.redeemed= false;
     }
     _activeInvestmentCount++;
-    investorInfo[investor].activeInvestmentCount++;
-    investorInfo[investor].investmentIds.push(_investments.length - 1);
+    _investorInfo[investor].activeInvestmentCount++;
+    _investorInfo[investor].investmentIds.push(_investments.length - 1);
     emit Invested(
       investor,
       _investments.length - 1,
@@ -768,11 +764,11 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     InvestmentRequest storage investmentRequest = _investmentRequests[
       investmentRequestId
     ];
-    if (!investorInfo[investmentRequest.investor].whitelisted) {
+    if (!_investorInfo[investmentRequest.investor].whitelisted) {
       revert NotInvestor();
     }
     if (
-      investorInfo[investmentRequest.investor].investmentRequestId !=
+      _investorInfo[investmentRequest.investor].investmentRequestId !=
       investmentRequestId
     ) {
       revert RequestOutOfDate();
@@ -801,16 +797,17 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       ''
     );
     investmentRequest.investmentId = _investments.length - 1;
-    investorInfo[investmentRequest.investor].investmentRequestId = type(uint256)
-      .max;
+    _investorInfo[investmentRequest.investor].investmentRequestId = type(
+      uint256
+    ).max;
   }
 
   function addManualInvestment(
     address investor,
     uint256 usdAmount,
-    string calldata notes
+    string memory notes
   ) public notClosed onlyManager stopImportingInvestments {
-    if (!investorInfo[investor].whitelisted) {
+    if (!_investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
     }
     uint256 fundAmount = _calcFundAmount(usdAmount);
@@ -836,9 +833,9 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 highWaterMark,
     uint256 originalUsdAmount,
     uint256 lastFeeSweepTimestamp,
-    string calldata notes
+    string memory notes
   ) public notClosed onlyManager notDoneImporting {
-    if (!investorInfo[investor].whitelisted) {
+    if (!_investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
     }
     uint256 fundAmount = _calcFundAmount(usdAmountRemaining);
@@ -951,7 +948,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 redemptionId = _redemptions.length;
     investment.redemptionId = redemptionId;
     _activeInvestmentCount--;
-    investorInfo[investment.constants.investor].activeInvestmentCount--;
+    _investorInfo[investment.constants.investor].activeInvestmentCount--;
     if (transferUsd) {
       if (!usingUsdToken) {
         revert NotUsingUsdToken();
@@ -1251,7 +1248,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _feesSweptNotWithdrawn -= fundAmount;
     uint256 usdAmount = _calcUsdAmount(fundAmount);
     _burn(address(this), fundAmount);
-    address to;
     if (transferUsd) {
       if (!usingUsdToken) {
         revert NotUsingUsdToken();
@@ -1273,9 +1269,23 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
         s
       );
       _usdToken.transferFrom(custodian, feeBeneficiary, usdAmount);
-      to = feeBeneficiary;
     }
-    _addFeeWithdrawal(feeBeneficiary, fundAmount, usdAmount, transferUsd);
+    _feeWithdrawals.push(
+      FeeWithdrawal({
+        to: feeBeneficiary,
+        fundAmount: fundAmount,
+        usdAmount: usdAmount,
+        usdTransferred: transferUsd,
+        timestamp: block.timestamp
+      })
+    );
+    emit FeesWithdrawn(
+      _feeWithdrawals.length - 1,
+      feeBeneficiary,
+      fundAmount,
+      usdAmount,
+      transferUsd
+    );
     Nav storage nav = _navs[_navs.length - 1];
     _addNav(nav.aum - usdAmount, nav.totalCapitalContributed, '');
   }
@@ -1288,7 +1298,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     logoUrl = _logoUrl;
     contactInfo = _contactInfo;
     tags = _tags;
-    emit FundDetailsChanged(logoUrl, contactInfo, tags);
+    emit FundDetailsChanged(_logoUrl, _contactInfo, _tags);
   }
 
   function editInvestorLimits(
@@ -1312,10 +1322,10 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     minInvestmentAmount = _minInvestmentAmount;
     timelock = _timelock;
     emit InvestorLimitsChanged(
-      maxInvestors,
-      maxInvestmentsPerInvestor,
-      minInvestmentAmount,
-      timelock
+      _maxInvestors,
+      _maxInvestmentsPerInvestor,
+      _minInvestmentAmount,
+      _timelock
     );
   }
 
@@ -1334,7 +1344,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     managementFee = _managementFee;
     performanceFee = _performanceFee;
-    emit FeesChanged(managementFee, performanceFee);
+    emit FeesChanged(_managementFee, _performanceFee);
   }
 
   function editFeeBeneficiary(address _feeBeneficiary) public onlyManager {
@@ -1342,12 +1352,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       revert InvalidFeeBeneficiary(); // Invalid fee beneficiary
     }
     feeBeneficiary = _feeBeneficiary;
-    emit FeeBeneficiaryChanged(feeBeneficiary);
+    emit FeeBeneficiaryChanged(_feeBeneficiary);
   }
 
   function editAumUpdater(address _aumUpdater) public onlyManager {
     aumUpdater = _aumUpdater;
-    emit AumUpdaterChanged(aumUpdater);
+    emit AumUpdaterChanged(_aumUpdater);
   }
 
   function _verifyUsdBalance(address from, uint256 amount) internal view {
