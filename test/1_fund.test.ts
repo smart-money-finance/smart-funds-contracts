@@ -752,6 +752,27 @@ describe('Fund', () => {
     expect(await fund.activeInvestmentCount()).to.eq(activeInvestments - 3);
   });
 
+  step('Should Process lots and lots of investments', async function () {
+    const amountToInvest = ethers.utils.parseUnits('1000', 6);
+    var i = 0;
+    for (i; i < 10; i++) {
+      await usdToken.connect(owner).faucet(amountToInvest);
+      await fund.addManualInvestment(wallets[6].address, amountToInvest, '');
+      await fund.addManualInvestment(wallets[7].address, amountToInvest, '');
+      await fund.addManualInvestment(wallets[8].address, amountToInvest, '');
+    }
+    const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [timeSkip],
+    });
+    await fund.processFees([
+      8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28, 29, 30,
+    ]);
+  });
+
   // step('Should close fund', async function () {
   //   await debug();
   //   await fund.closeFund();
