@@ -28,8 +28,28 @@ async function main() {
       ).sub(1),
     ),
   );
-  const fundImplementationAddress = ethers.utils.hexStripZeros(
+  const fundImplementationAddress = ethers.utils.hexDataSlice(
     fundImplementationHex,
+    12,
+  );
+
+  // initialize the implementation to mitigate someone else executing functions on it
+  const fundImplementation = await ethers.getContractAt(
+    'FundV0',
+    fundImplementationAddress,
+  );
+  await fundImplementation.initialize(
+    [ethers.constants.AddressZero, ethers.constants.AddressZero],
+    [0, 0, 0, 0, 0, 0, ethers.constants.MaxUint256, 1e9, 0],
+    '',
+    '',
+    '',
+    '',
+    '',
+    false,
+    `${ethers.constants.AddressZero.slice(0, -1)}1`,
+    ethers.constants.AddressZero,
+    ethers.constants.AddressZero,
   );
 
   const RegistryFactory = await ethers.getContractFactory('RegistryV0');

@@ -78,7 +78,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 investmentRequestId; // id of the request that started it, or max uint if it's a manual investment
     bool usdTransferred; // whether usd was transferred through the fund contract at time of investment
     bool imported; // whether investment was imported from a previous fund
-    string notes; // notes to attach to a manual or imported investment for manager record keeping
   }
   struct Investment {
     InvestmentConstants constants;
@@ -108,8 +107,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 managementFeeCostBasis,
     uint256 lockupTimestamp,
     bool imported,
-    bool usdTransferred,
-    string notes
+    bool usdTransferred
   );
   event DoneImportingInvestments();
 
@@ -335,8 +333,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
         usdAmount,
         type(uint256).max,
         false,
-        false,
-        ''
+        false
       );
     }
     _logoUrl = newLogoUrl;
@@ -355,10 +352,11 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     override
     onlyManager
   {
-    uint256 newVersion = FundV0(newFundImplementation).version();
     if (
-      newVersion > _registry.latestFundVersion() ||
-      address(_registry.fundImplementations(newVersion)) !=
+      newFundImplementation == address(0) ||
+      address(
+        _registry.fundImplementations(FundV0(newFundImplementation).version())
+      ) !=
       newFundImplementation
     ) {
       revert InvalidUpgrade();
@@ -531,7 +529,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       fundAmount = (usdAmount * nav.supply) / nav.aum;
     } else {
       // use initial price
-      fundAmount = usdAmount / _initialPrice;
+      fundAmount = (usdAmount * 1e6) / _initialPrice;
     }
   }
 
@@ -546,7 +544,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       usdAmount = (fundAmount * nav.aum) / nav.supply;
     } else {
       // use initial price
-      usdAmount = fundAmount * _initialPrice;
+      usdAmount = (fundAmount * _initialPrice) / 1e6;
     }
   }
 
@@ -715,8 +713,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 managementFeeCostBasis,
     uint256 investmentRequestId,
     bool transferUsd,
-    bool imported,
-    string memory notes
+    bool imported
   ) internal notFeeSweeping notClosed {
     if (usdAmount == 0 || fundAmount == 0) {
       revert InvalidAmountReturnedZero();
@@ -745,7 +742,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       investment.constants.investmentRequestId = investmentRequestId;
       investment.constants.usdTransferred = transferUsd;
       investment.constants.imported = imported;
-      investment.constants.notes = notes;
       investment.remainingFundAmount = fundAmount;
       // investment.usdManagementFeesSwept= 0;
       // investment.usdPerformanceFeesSwept= 0;
@@ -771,8 +767,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       managementFeeCostBasis,
       lockupTimestamp,
       imported,
-      transferUsd,
-      notes
+      transferUsd
     );
     uint256 newAum = usdAmount;
     uint256 newTotalCapitalContributed = usdAmount;
@@ -825,8 +820,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       investmentRequest.usdAmount,
       investmentRequestId,
       true,
-      false,
-      ''
+      false
     );
     investmentRequest.investmentId = _investments.length - 1;
     _investorInfo[investmentRequest.investor].investmentRequestId = type(
@@ -834,11 +828,11 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     ).max;
   }
 
-  function addManualInvestment(
-    address investor,
-    uint256 usdAmount,
-    string memory notes
-  ) public onlyManager stopImportingInvestments {
+  function addManualInvestment(address investor, uint256 usdAmount)
+    public
+    onlyManager
+    stopImportingInvestments
+  {
     if (!_investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
     }
@@ -852,8 +846,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       usdAmount,
       type(uint256).max,
       false,
-      false,
-      notes
+      false
     );
   }
 
@@ -863,8 +856,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 lockupTimestamp,
     uint256 highWaterMark,
     uint256 originalUsdAmount,
-    uint256 lastFeeSweepTimestamp,
-    string memory notes
+    uint256 lastFeeSweepTimestamp
   ) public onlyManager notDoneImporting {
     if (!_investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
@@ -879,8 +871,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       originalUsdAmount,
       type(uint256).max,
       false,
-      true,
-      notes
+      true
     );
   }
 
@@ -1114,7 +1105,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   function redemptionUsdAmount(uint256 investmentId)
     public
     view
-    onlyValidInvestmentId(investmentId)
     returns (uint256 usdAmount)
   {
     (, uint256 fundManagementFee, , uint256 fundPerformanceFee, , ) = _calcFees(
@@ -1151,6 +1141,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   function _calcFees(uint256 investmentId)
     internal
     view
+    onlyValidInvestmentId(investmentId)
     returns (
       uint256 usdManagementFee,
       uint256 fundManagementFee,
@@ -1192,10 +1183,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
   }
 
-  function _processFeesOnInvestment(uint256 investmentId)
-    internal
-    onlyValidInvestmentId(investmentId)
-  {
+  function _processFeesOnInvestment(uint256 investmentId) internal {
     (
       uint256 usdManagementFee,
       uint256 fundManagementFee,
