@@ -36,6 +36,25 @@ async function main() {
     fundImplementationHex,
   );
 
+  // initialize the implementation to mitigate someone else executing functions on it
+  const fundImplementation = await ethers.getContractAt(
+    'FundV0',
+    fundImplementationAddress,
+  );
+  await fundImplementation.initialize(
+    [ethers.constants.AddressZero, ethers.constants.AddressZero],
+    [0, 0, 0, 0, 0, 0, ethers.constants.MaxUint256, 1e9, 0],
+    '',
+    '',
+    '',
+    '',
+    '',
+    false,
+    `${ethers.constants.AddressZero.slice(0, -1)}1`,
+    ethers.constants.AddressZero,
+    ethers.constants.AddressZero,
+  );
+
   const RegistryFactory = await ethers.getContractFactory('RegistryV0');
   const Registry = await upgrades.deployProxy(
     RegistryFactory,

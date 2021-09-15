@@ -2,152 +2,20 @@
   "manifestVersion": "3.2",
   "proxies": [
     {
-      "address": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
-      "txHash": "0xaf0c364bad4e968d3f88cfe824eeca8ccca8f2e585f4cde3dd858235636fe405",
-      "kind": "uups"
-    },
-    {
       "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      "txHash": "0xdfec4bfdb9c0a6734118dd74443f69c0d23e89ae4c407d3b450c190abdab9049",
+      "txHash": "0x33d4427e5f5d5d438cdfe6150eadf0ef480a3d254889a90d2271a0024f4ebb64",
       "kind": "uups"
     },
     {
-      "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-      "txHash": "0x3ce08e39a325560a65f8f5d6bcd8f5f82d2a39ffcd7c03f4f2a2bb5549ac78d4",
+      "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+      "txHash": "0xc1c0eef5b8531f53f8c1044f6091b51628f68c5fa3e300cae096e60967e7033b",
       "kind": "uups"
     }
   ],
   "impls": {
-    "9a5700fd41fe5fd0d0d38f8a93a733bd48e44f70767623abc529151bb559f3d6": {
-      "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-      "txHash": "0xf77fbc959296632e783219e8eed8665e484b41c7fa83f67d8ec16554c2047be8",
-      "layout": {
-        "storage": [
-          {
-            "contract": "Initializable",
-            "label": "_initialized",
-            "type": "t_bool",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
-          },
-          {
-            "contract": "Initializable",
-            "label": "_initializing",
-            "type": "t_bool",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
-          },
-          {
-            "contract": "ERC1967UpgradeUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
-          },
-          {
-            "contract": "UUPSUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:64"
-          },
-          {
-            "contract": "ContextUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
-          },
-          {
-            "contract": "OwnableUpgradeable",
-            "label": "_owner",
-            "type": "t_address",
-            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
-          },
-          {
-            "contract": "OwnableUpgradeable",
-            "label": "__gap",
-            "type": "t_array(t_uint256)49_storage",
-            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "usdToken",
-            "type": "t_contract(ERC20Permit)4925",
-            "src": "contracts/RegistryV0.sol:20"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "latestFundVersion",
-            "type": "t_uint256",
-            "src": "contracts/RegistryV0.sol:21"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "fundImplementations",
-            "type": "t_array(t_contract(FundV0)9304)dyn_storage",
-            "src": "contracts/RegistryV0.sol:22"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "funds",
-            "type": "t_array(t_address)dyn_storage",
-            "src": "contracts/RegistryV0.sol:23"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "managerWhitelist",
-            "type": "t_mapping(t_address,t_bool)",
-            "src": "contracts/RegistryV0.sol:25"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "bypassWhitelist",
-            "type": "t_bool",
-            "src": "contracts/RegistryV0.sol:26"
-          },
-          {
-            "contract": "RegistryV0",
-            "label": "managerToFund",
-            "type": "t_mapping(t_address,t_address)",
-            "src": "contracts/RegistryV0.sol:27"
-          }
-        ],
-        "types": {
-          "t_contract(ERC20Permit)4925": {
-            "label": "contract ERC20Permit"
-          },
-          "t_uint256": {
-            "label": "uint256"
-          },
-          "t_array(t_contract(FundV0)9304)dyn_storage": {
-            "label": "contract FundV0[]"
-          },
-          "t_contract(FundV0)9304": {
-            "label": "contract FundV0"
-          },
-          "t_array(t_address)dyn_storage": {
-            "label": "address[]"
-          },
-          "t_address": {
-            "label": "address"
-          },
-          "t_mapping(t_address,t_bool)": {
-            "label": "mapping(address => bool)"
-          },
-          "t_bool": {
-            "label": "bool"
-          },
-          "t_mapping(t_address,t_address)": {
-            "label": "mapping(address => address)"
-          },
-          "t_array(t_uint256)49_storage": {
-            "label": "uint256[49]"
-          },
-          "t_array(t_uint256)50_storage": {
-            "label": "uint256[50]"
-          }
-        }
-      }
-    },
-    "839dcb30a5128bf2bf0b5300dbb435c30b473bfac57eab908bcc0bc51a01f16f": {
+    "7e48874b0c48b16870662fba3456091c1cf16dce599a8e6d56c53c1e76fa3112": {
       "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-      "txHash": "0x747f28f6f331057cbc1290ba618b843cd6f0fd2379efb2a1a177e3f38ee10c1d",
+      "txHash": "0xec3c46381077026cf67c568d6d0feced52de145fa752c04a1669e59c29738563",
       "layout": {
         "storage": [
           {
@@ -225,7 +93,7 @@
           {
             "contract": "ERC20PermitUpgradeable",
             "label": "_nonces",
-            "type": "t_mapping(t_address,t_struct(Counter)2518_storage)",
+            "type": "t_mapping(t_address,t_struct(Counter)2552_storage)",
             "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:25"
           },
           {
@@ -249,13 +117,13 @@
           {
             "contract": "ERC20VotesUpgradeable",
             "label": "_checkpoints",
-            "type": "t_mapping(t_address,t_array(t_struct(Checkpoint)1329_storage)dyn_storage)",
+            "type": "t_mapping(t_address,t_array(t_struct(Checkpoint)1363_storage)dyn_storage)",
             "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:40"
           },
           {
             "contract": "ERC20VotesUpgradeable",
             "label": "_totalSupplyCheckpoints",
-            "type": "t_array(t_struct(Checkpoint)1329_storage)dyn_storage",
+            "type": "t_array(t_struct(Checkpoint)1363_storage)dyn_storage",
             "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:41"
           },
           {
@@ -274,18 +142,18 @@
             "contract": "UUPSUpgradeable",
             "label": "__gap",
             "type": "t_array(t_uint256)50_storage",
-            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:64"
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:80"
           },
           {
             "contract": "FundV0",
             "label": "_registry",
-            "type": "t_contract(RegistryV0)9626",
+            "type": "t_contract(RegistryV0)9637",
             "src": "contracts/FundV0.sol:19"
           },
           {
             "contract": "FundV0",
             "label": "_usdToken",
-            "type": "t_contract(ERC20Permit)4925",
+            "type": "t_contract(ERC20Permit)4959",
             "src": "contracts/FundV0.sol:20"
           },
           {
@@ -387,13 +255,13 @@
           {
             "contract": "FundV0",
             "label": "_navs",
-            "type": "t_array(t_struct(Nav)5982_storage)dyn_storage",
+            "type": "t_array(t_struct(Nav)6016_storage)dyn_storage",
             "src": "contracts/FundV0.sol:47"
           },
           {
             "contract": "FundV0",
             "label": "_investorInfo",
-            "type": "t_mapping(t_address,t_struct(Investor)6010_storage)",
+            "type": "t_mapping(t_address,t_struct(Investor)6044_storage)",
             "src": "contracts/FundV0.sol:63"
           },
           {
@@ -411,87 +279,87 @@
           {
             "contract": "FundV0",
             "label": "_investments",
-            "type": "t_array(t_struct(Investment)6076_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:98"
+            "type": "t_array(t_struct(Investment)6108_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:97"
           },
           {
             "contract": "FundV0",
             "label": "_activeInvestmentCount",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:99"
+            "src": "contracts/FundV0.sol:98"
           },
           {
             "contract": "FundV0",
             "label": "_doneImportingInvestments",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:100"
+            "src": "contracts/FundV0.sol:99"
           },
           {
             "contract": "FundV0",
             "label": "_feeSweeps",
-            "type": "t_array(t_struct(FeeSweep)6125_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:126"
+            "type": "t_array(t_struct(FeeSweep)6155_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:124"
           },
           {
             "contract": "FundV0",
             "label": "_lastFeeSweepEndedTimestamp",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:127"
+            "src": "contracts/FundV0.sol:125"
           },
           {
             "contract": "FundV0",
             "label": "_investmentsSweptSinceStarted",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:128"
+            "src": "contracts/FundV0.sol:126"
           },
           {
             "contract": "FundV0",
             "label": "_feeSweeping",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:129"
+            "src": "contracts/FundV0.sol:127"
           },
           {
             "contract": "FundV0",
             "label": "_feeWithdrawals",
-            "type": "t_array(t_struct(FeeWithdrawal)6168_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:150"
+            "type": "t_array(t_struct(FeeWithdrawal)6198_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:148"
           },
           {
             "contract": "FundV0",
             "label": "_feesSweptNotWithdrawn",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:151"
+            "src": "contracts/FundV0.sol:149"
           },
           {
             "contract": "FundV0",
             "label": "_investmentRequests",
-            "type": "t_array(t_struct(InvestmentRequest)6201_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:169"
+            "type": "t_array(t_struct(InvestmentRequest)6231_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:167"
           },
           {
             "contract": "FundV0",
             "label": "_redemptionRequests",
-            "type": "t_array(t_struct(RedemptionRequest)6236_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:190"
+            "type": "t_array(t_struct(RedemptionRequest)6266_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:188"
           },
           {
             "contract": "FundV0",
             "label": "_redemptions",
-            "type": "t_array(t_struct(Redemption)6273_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:212"
+            "type": "t_array(t_struct(Redemption)6303_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:210"
           },
           {
             "contract": "FundV0",
             "label": "_closed",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:223"
+            "src": "contracts/FundV0.sol:221"
           }
         ],
         "types": {
-          "t_contract(RegistryV0)9626": {
+          "t_contract(RegistryV0)9637": {
             "label": "contract RegistryV0"
           },
-          "t_contract(ERC20Permit)4925": {
+          "t_contract(ERC20Permit)4959": {
             "label": "contract ERC20Permit"
           },
           "t_address": {
@@ -506,10 +374,10 @@
           "t_bool": {
             "label": "bool"
           },
-          "t_array(t_struct(Nav)5982_storage)dyn_storage": {
+          "t_array(t_struct(Nav)6016_storage)dyn_storage": {
             "label": "struct FundV0.Nav[]"
           },
-          "t_struct(Nav)5982_storage": {
+          "t_struct(Nav)6016_storage": {
             "label": "struct FundV0.Nav",
             "members": [
               {
@@ -534,10 +402,10 @@
               }
             ]
           },
-          "t_mapping(t_address,t_struct(Investor)6010_storage)": {
+          "t_mapping(t_address,t_struct(Investor)6044_storage)": {
             "label": "mapping(address => struct FundV0.Investor)"
           },
-          "t_struct(Investor)6010_storage": {
+          "t_struct(Investor)6044_storage": {
             "label": "struct FundV0.Investor",
             "members": [
               {
@@ -568,15 +436,15 @@
           "t_array(t_address)dyn_storage": {
             "label": "address[]"
           },
-          "t_array(t_struct(Investment)6076_storage)dyn_storage": {
+          "t_array(t_struct(Investment)6108_storage)dyn_storage": {
             "label": "struct FundV0.Investment[]"
           },
-          "t_struct(Investment)6076_storage": {
+          "t_struct(Investment)6108_storage": {
             "label": "struct FundV0.Investment",
             "members": [
               {
                 "label": "constants",
-                "type": "t_struct(InvestmentConstants)6051_storage"
+                "type": "t_struct(InvestmentConstants)6083_storage"
               },
               {
                 "label": "remainingFundAmount",
@@ -620,7 +488,7 @@
               }
             ]
           },
-          "t_struct(InvestmentConstants)6051_storage": {
+          "t_struct(InvestmentConstants)6083_storage": {
             "label": "struct FundV0.InvestmentConstants",
             "members": [
               {
@@ -662,17 +530,13 @@
               {
                 "label": "imported",
                 "type": "t_bool"
-              },
-              {
-                "label": "notes",
-                "type": "t_string_storage"
               }
             ]
           },
-          "t_array(t_struct(FeeSweep)6125_storage)dyn_storage": {
+          "t_array(t_struct(FeeSweep)6155_storage)dyn_storage": {
             "label": "struct FundV0.FeeSweep[]"
           },
-          "t_struct(FeeSweep)6125_storage": {
+          "t_struct(FeeSweep)6155_storage": {
             "label": "struct FundV0.FeeSweep",
             "members": [
               {
@@ -705,10 +569,10 @@
               }
             ]
           },
-          "t_array(t_struct(FeeWithdrawal)6168_storage)dyn_storage": {
+          "t_array(t_struct(FeeWithdrawal)6198_storage)dyn_storage": {
             "label": "struct FundV0.FeeWithdrawal[]"
           },
-          "t_struct(FeeWithdrawal)6168_storage": {
+          "t_struct(FeeWithdrawal)6198_storage": {
             "label": "struct FundV0.FeeWithdrawal",
             "members": [
               {
@@ -733,10 +597,10 @@
               }
             ]
           },
-          "t_array(t_struct(InvestmentRequest)6201_storage)dyn_storage": {
+          "t_array(t_struct(InvestmentRequest)6231_storage)dyn_storage": {
             "label": "struct FundV0.InvestmentRequest[]"
           },
-          "t_struct(InvestmentRequest)6201_storage": {
+          "t_struct(InvestmentRequest)6231_storage": {
             "label": "struct FundV0.InvestmentRequest",
             "members": [
               {
@@ -769,10 +633,10 @@
               }
             ]
           },
-          "t_array(t_struct(RedemptionRequest)6236_storage)dyn_storage": {
+          "t_array(t_struct(RedemptionRequest)6266_storage)dyn_storage": {
             "label": "struct FundV0.RedemptionRequest[]"
           },
-          "t_struct(RedemptionRequest)6236_storage": {
+          "t_struct(RedemptionRequest)6266_storage": {
             "label": "struct FundV0.RedemptionRequest",
             "members": [
               {
@@ -797,10 +661,10 @@
               }
             ]
           },
-          "t_array(t_struct(Redemption)6273_storage)dyn_storage": {
+          "t_array(t_struct(Redemption)6303_storage)dyn_storage": {
             "label": "struct FundV0.Redemption[]"
           },
-          "t_struct(Redemption)6273_storage": {
+          "t_struct(Redemption)6303_storage": {
             "label": "struct FundV0.Redemption",
             "members": [
               {
@@ -835,13 +699,13 @@
           "t_mapping(t_address,t_address)": {
             "label": "mapping(address => address)"
           },
-          "t_mapping(t_address,t_array(t_struct(Checkpoint)1329_storage)dyn_storage)": {
+          "t_mapping(t_address,t_array(t_struct(Checkpoint)1363_storage)dyn_storage)": {
             "label": "mapping(address => struct ERC20VotesUpgradeable.Checkpoint[])"
           },
-          "t_array(t_struct(Checkpoint)1329_storage)dyn_storage": {
+          "t_array(t_struct(Checkpoint)1363_storage)dyn_storage": {
             "label": "struct ERC20VotesUpgradeable.Checkpoint[]"
           },
-          "t_struct(Checkpoint)1329_storage": {
+          "t_struct(Checkpoint)1363_storage": {
             "label": "struct ERC20VotesUpgradeable.Checkpoint",
             "members": [
               {
@@ -863,10 +727,10 @@
           "t_array(t_uint256)47_storage": {
             "label": "uint256[47]"
           },
-          "t_mapping(t_address,t_struct(Counter)2518_storage)": {
+          "t_mapping(t_address,t_struct(Counter)2552_storage)": {
             "label": "mapping(address => struct CountersUpgradeable.Counter)"
           },
-          "t_struct(Counter)2518_storage": {
+          "t_struct(Counter)2552_storage": {
             "label": "struct CountersUpgradeable.Counter",
             "members": [
               {
@@ -889,6 +753,133 @@
           },
           "t_array(t_uint256)45_storage": {
             "label": "uint256[45]"
+          }
+        }
+      }
+    },
+    "9baeca2b30cc2ee4288c3e4f4f9cae164a2ac5c497680609cdaf352d90380dc0": {
+      "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+      "txHash": "0xfe465122886a2dd00f778d5af1387aed8272e96639f8a33d81aa8cd81f275798",
+      "layout": {
+        "storage": [
+          {
+            "contract": "Initializable",
+            "label": "_initialized",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
+          },
+          {
+            "contract": "Initializable",
+            "label": "_initializing",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
+          },
+          {
+            "contract": "ERC1967UpgradeUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
+          },
+          {
+            "contract": "UUPSUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:80"
+          },
+          {
+            "contract": "ContextUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "_owner",
+            "type": "t_address",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)49_storage",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "usdToken",
+            "type": "t_contract(ERC20Permit)4959",
+            "src": "contracts/RegistryV0.sol:20"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "latestFundVersion",
+            "type": "t_uint256",
+            "src": "contracts/RegistryV0.sol:21"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "fundImplementations",
+            "type": "t_array(t_contract(FundV0)9315)dyn_storage",
+            "src": "contracts/RegistryV0.sol:22"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "funds",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/RegistryV0.sol:23"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerWhitelist",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/RegistryV0.sol:25"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "bypassWhitelist",
+            "type": "t_bool",
+            "src": "contracts/RegistryV0.sol:26"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerToFund",
+            "type": "t_mapping(t_address,t_address)",
+            "src": "contracts/RegistryV0.sol:27"
+          }
+        ],
+        "types": {
+          "t_contract(ERC20Permit)4959": {
+            "label": "contract ERC20Permit"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_array(t_contract(FundV0)9315)dyn_storage": {
+            "label": "contract FundV0[]"
+          },
+          "t_contract(FundV0)9315": {
+            "label": "contract FundV0"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]"
           }
         }
       }

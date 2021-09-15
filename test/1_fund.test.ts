@@ -3,7 +3,7 @@ import { expect, use } from 'chai';
 import { ethers, network, upgrades } from 'hardhat';
 import { BigNumberish, Event, Signature } from 'ethers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
-import { step, xstep } from 'mocha-steps';
+import { step } from 'mocha-steps';
 import { solidity } from 'ethereum-waffle';
 import {
   TestUSDCoin__factory,
@@ -108,6 +108,25 @@ describe('Fund upgradeability', () => {
       fundImplementationHex,
     );
 
+    // initialize the implementation to mitigate someone else executing functions on it
+    const fundImplementation = FundV0__factory.connect(
+      fundImplementationAddress,
+      owner,
+    );
+    await fundImplementation.initialize(
+      [ethers.constants.AddressZero, ethers.constants.AddressZero],
+      [0, 0, 0, 0, 0, 0, ethers.constants.MaxUint256, 1e9, 0],
+      '',
+      '',
+      '',
+      '',
+      '',
+      false,
+      `${ethers.constants.AddressZero.slice(0, -1)}1`,
+      ethers.constants.AddressZero,
+      ethers.constants.AddressZero,
+    );
+
     const RegistryFactory = await ethers.getContractFactory('RegistryV0');
     const Registry = await upgrades.deployProxy(
       RegistryFactory,
@@ -159,7 +178,7 @@ describe('Fund upgradeability', () => {
     )?.args?.fund;
     fund = (await ethers.getContractAt('FundV0', fundAddress)) as FundV0;
     fund = FundV0__factory.connect(fundAddress, owner);
-    const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
+    // const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
     // expect(await fund.initialPrice()).to.eq(1e5);
     // await expect(fund.navs(0)).to.be.reverted; // no nav set yet
     // expect(await fund.investorCount()).to.eq(0);
@@ -364,7 +383,7 @@ describe('Fund', () => {
     const supplyBefore = await fund.totalSupply();
     const priceBefore = aumBefore.div(supplyBefore);
     const amountToInvest = ethers.utils.parseUnits('5000', 6);
-    await fund.addManualInvestment(wallets[4].address, amountToInvest, '');
+    await fund.addManualInvestment(wallets[4].address, amountToInvest);
     const investmentsLength = await fund.investmentsLength();
     expect(investmentsLength).to.eq(2);
     const navLength1 = await fund.navsLength();
@@ -725,9 +744,9 @@ describe('Fund', () => {
 
   step('Should Process redemption requests', async function () {
     const amountToInvest = ethers.utils.parseUnits('1000', 6);
-    await fund.addManualInvestment(wallets[6].address, amountToInvest, '');
-    await fund.addManualInvestment(wallets[7].address, amountToInvest, '');
-    await fund.addManualInvestment(wallets[8].address, amountToInvest, '');
+    await fund.addManualInvestment(wallets[6].address, amountToInvest);
+    await fund.addManualInvestment(wallets[7].address, amountToInvest);
+    await fund.addManualInvestment(wallets[8].address, amountToInvest);
     // await debug();
     const activeInvestments = (await fund.activeInvestmentCount()).toNumber();
     const investmentsLength = (await fund.investmentsLength()).toNumber();
@@ -759,9 +778,9 @@ describe('Fund', () => {
     var i = 0;
     for (i; i < 10; i++) {
       await usdToken.connect(owner).faucet(amountToInvest);
-      await fund.addManualInvestment(wallets[6].address, amountToInvest, '');
-      await fund.addManualInvestment(wallets[7].address, amountToInvest, '');
-      await fund.addManualInvestment(wallets[8].address, amountToInvest, '');
+      await fund.addManualInvestment(wallets[6].address, amountToInvest);
+      await fund.addManualInvestment(wallets[7].address, amountToInvest);
+      await fund.addManualInvestment(wallets[8].address, amountToInvest);
     }
     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
 
