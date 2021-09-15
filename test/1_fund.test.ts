@@ -104,8 +104,9 @@ describe('Fund upgradeability', () => {
         ).sub(1),
       ),
     );
-    const fundImplementationAddress = ethers.utils.hexStripZeros(
+    const fundImplementationAddress = ethers.utils.hexDataSlice(
       fundImplementationHex,
+      12,
     );
 
     // initialize the implementation to mitigate someone else executing functions on it
