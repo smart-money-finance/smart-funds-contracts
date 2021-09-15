@@ -5,6 +5,16 @@
       "address": "0x630a703a51F3Af5bF6dfd6E4a17694A6c40cF565",
       "txHash": "0xb4d609f032c3a54420d0e558f43dd10da44dce0835c7d5d69017a3208eb6adf2",
       "kind": "uups"
+    },
+    {
+      "address": "0xeE8DF4d2EA73eCbedD24964E40B5B8227a8E1399",
+      "txHash": "0x05790c457a9f9582a7fc5c04540489b3abaf646364e6f6fb74fb706dbfd71cc1",
+      "kind": "uups"
+    },
+    {
+      "address": "0xc1088D454EfF781881f45ca1a6078Ae8Ca5f283a",
+      "txHash": "0x57c4a54ac8122a0c888d3449dc6725b9c33fd1ff7fff68472efa5eb2447f4655",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -748,6 +758,133 @@
           },
           "t_array(t_uint256)45_storage": {
             "label": "uint256[45]"
+          }
+        }
+      }
+    },
+    "9baeca2b30cc2ee4288c3e4f4f9cae164a2ac5c497680609cdaf352d90380dc0": {
+      "address": "0x35D2B64C01776421B42AF450af3510cbf7872283",
+      "txHash": "0xabb6075e91f4d9ab99406fc17f62e62131ed9d1a7229f714576e38095e2e87bc",
+      "layout": {
+        "storage": [
+          {
+            "contract": "Initializable",
+            "label": "_initialized",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
+          },
+          {
+            "contract": "Initializable",
+            "label": "_initializing",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
+          },
+          {
+            "contract": "ERC1967UpgradeUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
+          },
+          {
+            "contract": "UUPSUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:80"
+          },
+          {
+            "contract": "ContextUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "_owner",
+            "type": "t_address",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)49_storage",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "usdToken",
+            "type": "t_contract(ERC20Permit)4959",
+            "src": "contracts/RegistryV0.sol:20"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "latestFundVersion",
+            "type": "t_uint256",
+            "src": "contracts/RegistryV0.sol:21"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "fundImplementations",
+            "type": "t_array(t_contract(FundV0)9315)dyn_storage",
+            "src": "contracts/RegistryV0.sol:22"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "funds",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/RegistryV0.sol:23"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerWhitelist",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/RegistryV0.sol:25"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "bypassWhitelist",
+            "type": "t_bool",
+            "src": "contracts/RegistryV0.sol:26"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerToFund",
+            "type": "t_mapping(t_address,t_address)",
+            "src": "contracts/RegistryV0.sol:27"
+          }
+        ],
+        "types": {
+          "t_contract(ERC20Permit)4959": {
+            "label": "contract ERC20Permit"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_array(t_contract(FundV0)9315)dyn_storage": {
+            "label": "contract FundV0[]"
+          },
+          "t_contract(FundV0)9315": {
+            "label": "contract FundV0"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]"
           }
         }
       }
