@@ -3,19 +3,19 @@
   "proxies": [
     {
       "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      "txHash": "0x33d4427e5f5d5d438cdfe6150eadf0ef480a3d254889a90d2271a0024f4ebb64",
+      "txHash": "0x3c45e1d1ba63a23d1d74ad42a1e3d1280db93a748ae34b1af1f9306a24864ee7",
       "kind": "uups"
     },
     {
       "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
-      "txHash": "0xc1c0eef5b8531f53f8c1044f6091b51628f68c5fa3e300cae096e60967e7033b",
+      "txHash": "0xa342fbcb3cb82bd37566a6a0f28b58a442e089b0e72a446478ae9c506064a5b0",
       "kind": "uups"
     }
   ],
   "impls": {
-    "7e48874b0c48b16870662fba3456091c1cf16dce599a8e6d56c53c1e76fa3112": {
+    "4c5347e53f3a1ca4dc32deaf77bf10ae44e8c6181b7a80889316830a54fc7601": {
       "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-      "txHash": "0xec3c46381077026cf67c568d6d0feced52de145fa752c04a1669e59c29738563",
+      "txHash": "0x9775beb23f9478e8c1162db001b5243e4c28feda2496b60f050dc7e868d57688",
       "layout": {
         "storage": [
           {
@@ -147,7 +147,7 @@
           {
             "contract": "FundV0",
             "label": "_registry",
-            "type": "t_contract(RegistryV0)9637",
+            "type": "t_contract(RegistryV0)9640",
             "src": "contracts/FundV0.sol:19"
           },
           {
@@ -279,84 +279,84 @@
           {
             "contract": "FundV0",
             "label": "_investments",
-            "type": "t_array(t_struct(Investment)6108_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:97"
+            "type": "t_array(t_struct(Investment)6112_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:99"
           },
           {
             "contract": "FundV0",
             "label": "_activeInvestmentCount",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:98"
+            "src": "contracts/FundV0.sol:100"
           },
           {
             "contract": "FundV0",
             "label": "_doneImportingInvestments",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:99"
+            "src": "contracts/FundV0.sol:101"
           },
           {
             "contract": "FundV0",
             "label": "_feeSweeps",
-            "type": "t_array(t_struct(FeeSweep)6155_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:124"
+            "type": "t_array(t_struct(FeeSweep)6161_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:127"
           },
           {
             "contract": "FundV0",
             "label": "_lastFeeSweepEndedTimestamp",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:125"
+            "src": "contracts/FundV0.sol:128"
           },
           {
             "contract": "FundV0",
             "label": "_investmentsSweptSinceStarted",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:126"
+            "src": "contracts/FundV0.sol:129"
           },
           {
             "contract": "FundV0",
             "label": "_feeSweeping",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:127"
+            "src": "contracts/FundV0.sol:130"
           },
           {
             "contract": "FundV0",
             "label": "_feeWithdrawals",
-            "type": "t_array(t_struct(FeeWithdrawal)6198_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:148"
+            "type": "t_array(t_struct(FeeWithdrawal)6204_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:151"
           },
           {
             "contract": "FundV0",
             "label": "_feesSweptNotWithdrawn",
             "type": "t_uint256",
-            "src": "contracts/FundV0.sol:149"
+            "src": "contracts/FundV0.sol:152"
           },
           {
             "contract": "FundV0",
             "label": "_investmentRequests",
-            "type": "t_array(t_struct(InvestmentRequest)6231_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:167"
+            "type": "t_array(t_struct(InvestmentRequest)6237_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:170"
           },
           {
             "contract": "FundV0",
             "label": "_redemptionRequests",
-            "type": "t_array(t_struct(RedemptionRequest)6266_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:188"
+            "type": "t_array(t_struct(RedemptionRequest)6272_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:191"
           },
           {
             "contract": "FundV0",
             "label": "_redemptions",
-            "type": "t_array(t_struct(Redemption)6303_storage)dyn_storage",
-            "src": "contracts/FundV0.sol:210"
+            "type": "t_array(t_struct(Redemption)6309_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:213"
           },
           {
             "contract": "FundV0",
             "label": "_closed",
             "type": "t_bool",
-            "src": "contracts/FundV0.sol:221"
+            "src": "contracts/FundV0.sol:224"
           }
         ],
         "types": {
-          "t_contract(RegistryV0)9637": {
+          "t_contract(RegistryV0)9640": {
             "label": "contract RegistryV0"
           },
           "t_contract(ERC20Permit)4959": {
@@ -436,15 +436,15 @@
           "t_array(t_address)dyn_storage": {
             "label": "address[]"
           },
-          "t_array(t_struct(Investment)6108_storage)dyn_storage": {
+          "t_array(t_struct(Investment)6112_storage)dyn_storage": {
             "label": "struct FundV0.Investment[]"
           },
-          "t_struct(Investment)6108_storage": {
+          "t_struct(Investment)6112_storage": {
             "label": "struct FundV0.Investment",
             "members": [
               {
                 "label": "constants",
-                "type": "t_struct(InvestmentConstants)6083_storage"
+                "type": "t_struct(InvestmentConstants)6085_storage"
               },
               {
                 "label": "remainingFundAmount",
@@ -471,6 +471,10 @@
                 "type": "t_uint256"
               },
               {
+                "label": "lastFeeSweepTimestamp",
+                "type": "t_uint256"
+              },
+              {
                 "label": "feeSweepIds",
                 "type": "t_array(t_uint256)dyn_storage"
               },
@@ -488,7 +492,7 @@
               }
             ]
           },
-          "t_struct(InvestmentConstants)6083_storage": {
+          "t_struct(InvestmentConstants)6085_storage": {
             "label": "struct FundV0.InvestmentConstants",
             "members": [
               {
@@ -516,6 +520,10 @@
                 "type": "t_uint256"
               },
               {
+                "label": "initialLastFeeSweepTimestamp",
+                "type": "t_uint256"
+              },
+              {
                 "label": "managementFeeCostBasis",
                 "type": "t_uint256"
               },
@@ -533,10 +541,10 @@
               }
             ]
           },
-          "t_array(t_struct(FeeSweep)6155_storage)dyn_storage": {
+          "t_array(t_struct(FeeSweep)6161_storage)dyn_storage": {
             "label": "struct FundV0.FeeSweep[]"
           },
-          "t_struct(FeeSweep)6155_storage": {
+          "t_struct(FeeSweep)6161_storage": {
             "label": "struct FundV0.FeeSweep",
             "members": [
               {
@@ -569,10 +577,10 @@
               }
             ]
           },
-          "t_array(t_struct(FeeWithdrawal)6198_storage)dyn_storage": {
+          "t_array(t_struct(FeeWithdrawal)6204_storage)dyn_storage": {
             "label": "struct FundV0.FeeWithdrawal[]"
           },
-          "t_struct(FeeWithdrawal)6198_storage": {
+          "t_struct(FeeWithdrawal)6204_storage": {
             "label": "struct FundV0.FeeWithdrawal",
             "members": [
               {
@@ -597,10 +605,10 @@
               }
             ]
           },
-          "t_array(t_struct(InvestmentRequest)6231_storage)dyn_storage": {
+          "t_array(t_struct(InvestmentRequest)6237_storage)dyn_storage": {
             "label": "struct FundV0.InvestmentRequest[]"
           },
-          "t_struct(InvestmentRequest)6231_storage": {
+          "t_struct(InvestmentRequest)6237_storage": {
             "label": "struct FundV0.InvestmentRequest",
             "members": [
               {
@@ -633,10 +641,10 @@
               }
             ]
           },
-          "t_array(t_struct(RedemptionRequest)6266_storage)dyn_storage": {
+          "t_array(t_struct(RedemptionRequest)6272_storage)dyn_storage": {
             "label": "struct FundV0.RedemptionRequest[]"
           },
-          "t_struct(RedemptionRequest)6266_storage": {
+          "t_struct(RedemptionRequest)6272_storage": {
             "label": "struct FundV0.RedemptionRequest",
             "members": [
               {
@@ -661,10 +669,10 @@
               }
             ]
           },
-          "t_array(t_struct(Redemption)6303_storage)dyn_storage": {
+          "t_array(t_struct(Redemption)6309_storage)dyn_storage": {
             "label": "struct FundV0.Redemption[]"
           },
-          "t_struct(Redemption)6303_storage": {
+          "t_struct(Redemption)6309_storage": {
             "label": "struct FundV0.Redemption",
             "members": [
               {
@@ -757,9 +765,9 @@
         }
       }
     },
-    "9baeca2b30cc2ee4288c3e4f4f9cae164a2ac5c497680609cdaf352d90380dc0": {
+    "0b5fb39c7aaa5de21f3c43c1ee48a93c437203d5b39011f726f5112ea3be8ac4": {
       "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-      "txHash": "0xfe465122886a2dd00f778d5af1387aed8272e96639f8a33d81aa8cd81f275798",
+      "txHash": "0xed127bda91682903960e4175a7ae10cdeafc57818a9b2ef34f9992acc87a6646",
       "layout": {
         "storage": [
           {
@@ -819,7 +827,7 @@
           {
             "contract": "RegistryV0",
             "label": "fundImplementations",
-            "type": "t_array(t_contract(FundV0)9315)dyn_storage",
+            "type": "t_array(t_contract(FundV0)9318)dyn_storage",
             "src": "contracts/RegistryV0.sol:22"
           },
           {
@@ -854,10 +862,10 @@
           "t_uint256": {
             "label": "uint256"
           },
-          "t_array(t_contract(FundV0)9315)dyn_storage": {
+          "t_array(t_contract(FundV0)9318)dyn_storage": {
             "label": "contract FundV0[]"
           },
-          "t_contract(FundV0)9315": {
+          "t_contract(FundV0)9318": {
             "label": "contract FundV0"
           },
           "t_array(t_address)dyn_storage": {

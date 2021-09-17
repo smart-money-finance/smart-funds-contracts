@@ -91,24 +91,9 @@ describe('Fund upgradeability', () => {
       initializer: false,
     });
     await fundProxy.deployed();
-    // storage slot of implementation is
-    // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))
-    // see EIP-1967
-    const fundImplementationHex = await ethers.provider.getStorageAt(
-      fundProxy.address,
-      ethers.utils.hexValue(
-        ethers.BigNumber.from(
-          ethers.utils.keccak256(
-            ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
-          ),
-        ).sub(1),
-      ),
-    );
-    const fundImplementationAddress = ethers.utils.hexDataSlice(
-      fundImplementationHex,
-      12,
-    );
 
+    const fundImplementationAddress =
+      await upgrades.erc1967.getImplementationAddress(fundProxy.address);
     // initialize the implementation to mitigate someone else executing functions on it
     const fundImplementation = FundV0__factory.connect(
       fundImplementationAddress,
