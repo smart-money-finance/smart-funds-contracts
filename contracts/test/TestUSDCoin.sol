@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.7;
 
-import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
+import { ERC20Permit, ERC20 } from '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
 contract TestUSDCoin is ERC20Permit {
   constructor() ERC20Permit('USD Coin') ERC20('USD Coin', 'USDC') {}

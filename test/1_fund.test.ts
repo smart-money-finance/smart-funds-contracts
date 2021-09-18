@@ -12,6 +12,8 @@ import {
   RegistryV0,
   FundV0__factory,
   FundV0,
+  TestFundV0__factory,
+  TestFundV0,
 } from '../typechain';
 
 async function signPermit(
@@ -65,7 +67,8 @@ async function signPermit(
 }
 
 use(solidity);
-describe('Fund', () => {
+
+describe('Fund upgradeability', () => {
   let usdToken: TestUSDCoin;
   let registry: RegistryV0;
   let fund: FundV0;
@@ -79,6 +82,7 @@ describe('Fund', () => {
     const UsdToken = await ethers.getContractFactory('TestUSDCoin');
     const usdTokenContract = await UsdToken.deploy();
     await usdTokenContract.deployed();
+    // usdToken = usdTokenContract as TestUSDCoin;
     usdToken = TestUSDCoin__factory.connect(usdTokenContract.address, owner);
 
     const FundFactory = await ethers.getContractFactory('FundV0');
@@ -87,21 +91,36 @@ describe('Fund', () => {
       initializer: false,
     });
     await fundProxy.deployed();
-    // storage slot of implementation is
-    // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))
-    // see EIP-1967
-    const fundImplementationHex = await ethers.provider.getStorageAt(
-      fundProxy.address,
-      ethers.utils.hexValue(
-        ethers.BigNumber.from(
-          ethers.utils.keccak256(
-            ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
-          ),
-        ).sub(1),
-      ),
+
+    const fundImplementationAddress =
+      await upgrades.erc1967.getImplementationAddress(fundProxy.address);
+    // initialize the implementation to mitigate someone else executing functions on it
+    const fundImplementation = FundV0__factory.connect(
+      fundImplementationAddress,
+      owner,
     );
-    const fundImplementationAddress = ethers.utils.hexStripZeros(
-      fundImplementationHex,
+    await fundImplementation.initialize(
+      [ethers.constants.AddressZero, ethers.constants.AddressZero],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ethers.constants.MaxUint256,
+        '1000000000000000000000',
+        0,
+      ],
+      '',
+      '',
+      '',
+      '',
+      '',
+      false,
+      `${ethers.constants.AddressZero.slice(0, -1)}1`,
+      ethers.constants.AddressZero,
+      ethers.constants.AddressZero,
     );
 
     const RegistryFactory = await ethers.getContractFactory('RegistryV0');
@@ -113,6 +132,7 @@ describe('Fund', () => {
       },
     );
     await Registry.deployed();
+    // registry = Registry as RegistryV0;
     registry = RegistryV0__factory.connect(Registry.address, owner);
 
     // initialize wallets with usdc
@@ -132,10 +152,14 @@ describe('Fund', () => {
     await registry.whitelistMulti([owner.address]);
   });
 
-  step('Should create fund', async () => {
+  step('Should create new fund', async () => {
+    const FundFactory = await ethers.getContractFactory('FundV0');
+    const fundInstance = await FundFactory.deploy();
+    await fundInstance.deployed();
+    fund = FundV0__factory.connect(fundInstance.address, owner);
     const tx = await registry.newFund(
       [owner.address, wallets[5].address],
-      [1, 200, 2000, 20, 5, 1, 1],
+      [1, 200, 2000, 20, 5, 10, 1e7, '100000000000000000', 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -143,47 +167,128 @@ describe('Fund', () => {
       'Hedge Fund,Test Fund,Other tag',
       true,
     );
+
     const txResp = await tx.wait();
     const fundAddress = txResp.events?.find(
       (event: Event) => event.event === 'FundCreated',
     )?.args?.fund;
+    fund = (await ethers.getContractAt('FundV0', fundAddress)) as FundV0;
     fund = FundV0__factory.connect(fundAddress, owner);
-    // fund = (await ethers.getContractAt('SmartFund', fundAddress)) as SmartFund;
-    const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
-    expect(await fund.aum()).to.eq(0);
-    expect(await fund.highWaterPrice()).to.eq(initialPrice);
-    expect(await fund.activeInvestmentCount()).to.eq(0);
-    expect(
-      await fund.activeInvestmentCountPerInvestor(wallets[1].address),
-    ).to.eq(0);
+    // const initialPrice = ethers.BigNumber.from('10000000000000000'); // $0.01 * 1e18
+    // expect(await fund.initialPrice()).to.eq(1e5);
+    // await expect(fund.navs(0)).to.be.reverted; // no nav set yet
+    // expect(await fund.investorCount()).to.eq(0);
+    // expect(await fund.activeInvestmentCount()).to.eq(0);
+
+    // expect(await fund.investorCount()).to.eq(0);
+    // // await debug();
+  });
+});
+
+describe('Fund', () => {
+  let usdToken: TestUSDCoin;
+  let fund: TestFundV0;
+  let owner: SignerWithAddress;
+  let wallets: SignerWithAddress[];
+
+  before(async () => {
+    wallets = await ethers.getSigners();
+    owner = wallets[0];
+
+    const UsdToken = await ethers.getContractFactory('TestUSDCoin');
+    const usdTokenContract = await UsdToken.deploy();
+    await usdTokenContract.deployed();
+    // usdToken = usdTokenContract as TestUSDCoin;
+    usdToken = TestUSDCoin__factory.connect(usdTokenContract.address, owner);
+
+    // initialize wallets with usdc
+    await usdToken.connect(owner).faucet(ethers.utils.parseUnits('100000', 6));
+    await usdToken
+      .connect(wallets[2])
+      .faucet(ethers.utils.parseUnits('100000', 6));
+    await usdToken
+      .connect(wallets[3])
+      .faucet(ethers.utils.parseUnits('100000', 6));
+    await usdToken
+      .connect(wallets[4])
+      .faucet(ethers.utils.parseUnits('100000', 6));
+  });
+
+  // step('Should whitelist fund manager', async () => {
+  //   await registry.whitelistMulti([owner.address]);
+  // });
+
+  step('Should create new fund', async () => {
+    const FundFactory = await ethers.getContractFactory('TestFundV0');
+    const fundInstance = await FundFactory.deploy();
+    await fundInstance.deployed();
+    fund = TestFundV0__factory.connect(fundInstance.address, owner);
+
+    await fund.initialize(
+      [owner.address, wallets[5].address],
+      [1, 200, 200, 2000, 10, 10, 1e7, '100000000000000000', 0],
+      'Bobs cool fund',
+      'BCF',
+      'https://google.com/favicon.ico',
+      'bob@bob.com',
+      'Hedge Fund,Test Fund,Other tag',
+      true,
+      owner.address,
+      ethers.constants.AddressZero,
+      usdToken.address,
+    );
+
+    expect(await fund.initialPrice()).to.eq('100000000000000000');
+    await expect(fund.navs(0)).to.be.reverted; // no nav set yet
     expect(await fund.investorCount()).to.eq(0);
-    await debug();
+    expect(await fund.activeInvestmentCount()).to.eq(0);
+
+    expect(await fund.investorCount()).to.eq(0);
+    // // await debug();
   });
 
   step('Should whitelist clients', async () => {
-    expect(await fund.whitelist(wallets[1].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[2].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[3].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[4].address)).to.eq(false);
-
+    expect((await fund.investorInfo(wallets[1].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[2].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[3].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[4].address)).whitelisted).to.eq(
+      false,
+    );
     await fund.whitelistMulti([
       wallets[1].address,
       wallets[2].address,
       wallets[3].address,
       wallets[4].address,
     ]);
-
     expect(await fund.investorCount()).to.eq(4);
-    expect(await fund.whitelist(wallets[1].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[2].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[3].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[4].address)).to.eq(true);
-    expect(await fund.whitelist(wallets[0].address)).to.eq(false);
-    expect(await fund.whitelist(wallets[5].address)).to.eq(false);
+    expect((await fund.investorInfo(wallets[1].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[2].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[3].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[4].address)).whitelisted).to.eq(
+      true,
+    );
+    expect((await fund.investorInfo(wallets[0].address)).whitelisted).to.eq(
+      false,
+    );
+    expect((await fund.investorInfo(wallets[5].address)).whitelisted).to.eq(
+      false,
+    );
   });
 
   step('Should request to invest client funds', async () => {
-    const amountToInvest = ethers.utils.parseUnits('10000', 6);
+    const amountToInvest = ethers.utils.parseUnits('5000', 6);
     const signature = await signPermit(
       wallets[2],
       usdToken,
@@ -194,17 +299,17 @@ describe('Fund', () => {
     );
     await fund
       .connect(wallets[2])
-      .updateInvestmentRequest(
+      .createOrUpdateInvestmentRequest(
         amountToInvest,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
-        0,
+        false,
         signature.v,
         signature.r,
         signature.s,
       );
-    const request = await fund.investmentRequests(wallets[2].address);
+    const request = await fund.investmentRequests(0);
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request }).to.deep.include({
       usdAmount: amountToInvest,
@@ -218,51 +323,74 @@ describe('Fund', () => {
   });
 
   step('Should process investment request', async () => {
-    const amountToInvest = ethers.utils.parseUnits('10000', 6);
-    const aumBefore = await fund.aum();
-    const supplyBefore = await fund.totalSupply();
-    expect(await fund.aum()).to.eq(aumBefore);
-    expect(await fund.totalSupply()).to.eq(supplyBefore);
-    await fund.processInvestmentRequest(wallets[2].address, 1);
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
-    const aumAfter = await fund.aum();
+    const amountToInvest = ethers.utils.parseUnits('5000', 6);
+    const navLength = await fund.navsLength();
+    expect(navLength).to.eq(0);
+    const aumBefore = ethers.BigNumber.from(0);
+    const supplyBefore = await fund.totalSupply();
+    expect(supplyBefore).to.eq(0);
+    const investmentRequest = await fund.investmentRequests(0);
+    // console.log(investmentRequest);
+    // console.log(await fund.investorInfo(wallets[2].address));
+
+    await fund.processInvestmentRequest(0);
+    const navLengthAfter = await fund.navsLength();
+    const aumAfter = (await fund.navs(navLengthAfter.sub(1))).aum;
     const supplyAfter = await fund.totalSupply();
-    const price = aumAfter
-      .mul(ethers.utils.parseUnits('1', 18))
-      .div(supplyAfter);
+
+    expect(aumAfter).to.eq(investmentRequest.usdAmount.add(aumBefore));
     const investment = await fund.investments(0);
-    const request = investment.investmentRequest;
-    const fundMinted = request.usdAmount.mul(supplyAfter).div(aumAfter);
-    expect(await fund.aum()).to.eq(amountToInvest);
-    const blankRequest = await fund.investmentRequests(wallets[2].address);
-    expect({ ...blankRequest }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(timestamp),
+    const fundMinted = investment.constants.initialUsdAmount
+      .mul(supplyAfter)
+      .div(aumAfter);
+    expect(aumAfter).to.eq(amountToInvest);
+    const request = await fund.investmentRequests(0);
+    expect({ ...request }).to.deep.include({
+      usdAmount: amountToInvest,
+      minFundAmount: ethers.BigNumber.from(1),
+      maxFundAmount: ethers.constants.MaxUint256,
+      deadline: ethers.constants.MaxUint256,
+      investmentId: ethers.BigNumber.from(0),
     });
-    expect(await fund.highWaterPrice()).to.eq(price);
-    const priceAfter = aumAfter
-      .mul(ethers.utils.parseUnits('1', 18))
-      .div(supplyAfter);
-    expect({ ...investment }).to.deep.include({
-      investor: wallets[2].address,
-      initialUsdAmount: request.usdAmount,
-      initialFundAmount: fundMinted,
-      initialHighWaterPrice: priceAfter,
-      usdTransferred: true,
-      timestamp: ethers.BigNumber.from(timestamp),
-      redeemedTimestamp: ethers.BigNumber.from(0),
-      redemptionUsdTransferred: false,
-    });
+    expect(investment.highWaterMark).to.eq(aumAfter);
+    // const priceAfter = aumAfter
+    //   .mul(ethers.utils.parseUnits('1', 18))
+    //   .div(supplyAfter);
+    // expect({ ...investment }).to.deep.include({
+    //   investor: wallets[2].address,
+    //   initialUsdAmount: request.usdAmount,
+    //   initialFundAmount: fundMinted,
+    //   initialHighWaterPrice: aumAfter,
+    // });
     expect(await usdToken.balanceOf(fund.address)).to.eq(0);
-    expect(await fund.balanceOf(investment.investor)).to.eq(fundMinted);
+    expect(await fund.balanceOf(investment.constants.investor)).to.eq(
+      fundMinted,
+    );
     expect(await fund.activeInvestmentCount()).to.eq(1);
-    expect(
-      await fund.activeInvestmentCountPerInvestor(wallets[2].address),
-    ).to.eq(1);
-    await debug();
+
+    // await debug();
+  });
+
+  step('Should add manual investment and not change price', async () => {
+    const navLength = await fund.navsLength();
+    const navBefore = await fund.navs(navLength.sub(1));
+    const aumBefore = navBefore.aum;
+    const supplyBefore = await fund.totalSupply();
+    const priceBefore = aumBefore.div(supplyBefore);
+    const amountToInvest = ethers.utils.parseUnits('5000', 6);
+    await fund.addManualInvestment(wallets[4].address, amountToInvest);
+    const investmentsLength = await fund.investmentsLength();
+    expect(investmentsLength).to.eq(2);
+    const navLength1 = await fund.navsLength();
+    const navAfter = await fund.navs(navLength1.sub(1));
+    const aumAfter = navAfter.aum;
+    const supplyAfter = await fund.totalSupply();
+    const priceAfter = aumAfter.div(supplyAfter);
+    expect(priceAfter).to.eq(priceBefore);
+    expect(await fund.balanceOf(wallets[4].address)).to.eq(
+      supplyAfter.sub(supplyBefore),
+    );
   });
 
   step('Should update AUM', async () => {
@@ -270,19 +398,113 @@ describe('Fund', () => {
     const supply = await fund.totalSupply();
     await fund.updateAum(newAum, '');
     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
-    const aumAfter = await fund.aum();
+    const navLength = await fund.navsLength();
+    const nav = await fund.navs(navLength.sub(1));
+    const aumAfter = nav.aum;
     const supplyAfter = await fund.totalSupply();
     expect(supplyAfter).to.eq(supply);
     expect(aumAfter).to.eq(newAum);
-    expect(await fund.aumTimestamp()).to.eq(timestamp);
-    await debug();
+    expect(nav.timestamp).to.eq(timestamp);
+    // await debug();
   });
 
+  // describe('Should revert when on certain conditions', () => {
+  //   let feesFundAmount: BigNumberish;
+  //   let usdAmount: BigNumberish;
+  //   let signature: Signature;
+
+  //   before(async () => {
+  //     feesFundAmount = await fund.balanceOf(fund.address);
+  //     const navLength = await fund.navsLength();
+  //     const nav = await fund.navs(navLength.sub(1));
+  //     usdAmount = feesFundAmount.mul(nav.aum).div(await fund.totalSupply());
+  //     signature = await signPermit(
+  //       owner,
+  //       usdToken,
+  //       network.config.chainId || 1,
+  //       fund.address,
+  //       usdAmount,
+  //       ethers.constants.MaxUint256,
+  //     );
+  //     console.log(feesFundAmount);
+  //     console.log(usdAmount);
+  //   });
+
+  //   it('should revert with not enough fees ', async () => {
+  //     // TODO: Should this be allowed before processfees?
+  //     const tx = await fund.withdrawFees(
+  //       feesFundAmount,
+  //       true,
+  //       usdAmount,
+  //       ethers.constants.MaxUint256,
+  //       signature.v,
+  //       signature.r,
+  //       signature.s,
+  //     );
+  //     await expect(
+  //       fund.withdrawFees(
+  //         feesFundAmount,
+  //         true,
+  //         usdAmount,
+  //         ethers.constants.MaxUint256,
+  //         signature.v,
+  //         signature.r,
+  //         signature.s,
+  //       ),
+  //     ).to.be.revertedWith('NotEnoughFees');
+  //   });
+
+  //   it('should revert when fees are tried to be withdrawn before a full fee processing', async () => {
+  //     const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
+  //     console.log(timestamp);
+  //     const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+  //     await network.provider.send('evm_increaseTime', [timeSkip]);
+  //     await network.provider.send('evm_mine');
+  //     const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
+  //     console.log(timestamp2);
+  //     await fund.processFees([0]);
+  //     await expect(
+  //       fund.withdrawFees(
+  //         feesFundAmount,
+  //         true,
+  //         usdAmount,
+  //         ethers.constants.MaxUint256,
+  //         signature.v,
+  //         signature.r,
+  //         signature.s,
+  //       ),
+  //     ).to.be.revertedWith('FeeSweeping');
+  //     await fund.processFees([1]);
+  //     await fund.withdrawFees(
+  //       feesFundAmount,
+  //       true,
+  //       usdAmount,
+  //       ethers.constants.MaxUint256,
+  //       signature.v,
+  //       signature.r,
+  //       signature.s,
+  //     );
+  //   });
+
+  //   it('should revert before timelock', async () => {
+  //     await expect(fund.processFees([0])).to.be.revertedWith(
+  //       'NotPastFeeTimelock',
+  //     );
+  //   });
+  // });
+
   step('Should withdraw accrued fees', async () => {
+    const timestamp = (await ethers.provider.getBlock('latest')).timestamp;
+    // console.log(timestamp);
+    const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+    await network.provider.send('evm_increaseTime', [timeSkip]);
+    await network.provider.send('evm_mine');
+
+    await fund.processFees([0, 1]);
     const feesFundAmount = await fund.balanceOf(fund.address);
-    const usdAmount = feesFundAmount
-      .mul(await fund.aum())
-      .div(await fund.totalSupply());
+    const navLength = await fund.navsLength();
+    const nav = await fund.navs(navLength.sub(1));
+    const usdAmount = feesFundAmount.mul(nav.aum).div(await fund.totalSupply());
     expect(await usdToken.balanceOf(wallets[5].address)).to.eq(0);
     const signature = await signPermit(
       owner,
@@ -292,6 +514,7 @@ describe('Fund', () => {
       usdAmount,
       ethers.constants.MaxUint256,
     );
+
     await fund.withdrawFees(
       feesFundAmount,
       true,
@@ -306,105 +529,84 @@ describe('Fund', () => {
   });
 
   step('Should create, update, and cancel investment request', async () => {
-    const request = await fund.investmentRequests(wallets[3].address);
-    expect({ ...request }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(0),
-      nonce: ethers.BigNumber.from(0),
-    });
     const signature = await signPermit(
       wallets[3],
       usdToken,
       network.config.chainId || 1,
       fund.address,
-      100,
+      1e7,
       ethers.constants.MaxUint256,
     );
     await fund
       .connect(wallets[3])
-      .updateInvestmentRequest(
-        100,
+      .createOrUpdateInvestmentRequest(
+        1e7,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
-        0,
+        false,
         signature.v,
         signature.r,
         signature.s,
       );
-    const request1 = await fund.investmentRequests(wallets[3].address);
+    const request1 = await fund.investmentRequests(1);
     const timestamp1 = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request1 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(100),
+      usdAmount: ethers.BigNumber.from(1e7),
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,
       timestamp: ethers.BigNumber.from(timestamp1),
-      nonce: ethers.BigNumber.from(1),
     });
     const signature2 = await signPermit(
       wallets[3],
       usdToken,
       network.config.chainId || 1,
       fund.address,
-      210,
+      2e7,
       ethers.constants.MaxUint256,
     );
     await fund
       .connect(wallets[3])
-      .updateInvestmentRequest(
-        210,
+      .createOrUpdateInvestmentRequest(
+        2e7,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
-        1,
+        true,
         signature2.v,
         signature2.r,
         signature2.s,
       );
-    const request2 = await fund.investmentRequests(wallets[3].address);
+    const request2 = await fund.investmentRequests(2);
     const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request2 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(210),
+      usdAmount: ethers.BigNumber.from(2e7),
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,
       timestamp: ethers.BigNumber.from(timestamp2),
-      nonce: ethers.BigNumber.from(2),
     });
-    const signature3 = await signPermit(
-      wallets[3],
-      usdToken,
-      network.config.chainId || 1,
-      fund.address,
-      0,
-      ethers.constants.MaxUint256,
-    );
-    await fund
-      .connect(wallets[3])
-      .cancelInvestmentRequest(
-        ethers.constants.MaxUint256,
-        signature3.v,
-        signature3.r,
-        signature3.s,
-      );
-    const request3 = await fund.investmentRequests(wallets[3].address);
-    const timestamp3 = (await ethers.provider.getBlock('latest')).timestamp;
+
+    await fund.connect(wallets[3]).cancelInvestmentRequest();
+    const investor = await fund.investorInfo(wallets[3].address);
+    expect(investor.investmentRequestId).to.eq(ethers.constants.MaxUint256);
+    const request3 = await fund.investmentRequests(2);
     expect({ ...request3 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(0),
-      minFundAmount: ethers.BigNumber.from(0),
-      maxFundAmount: ethers.BigNumber.from(0),
-      deadline: ethers.BigNumber.from(0),
-      timestamp: ethers.BigNumber.from(timestamp3),
-      nonce: ethers.BigNumber.from(3),
+      usdAmount: ethers.BigNumber.from(2e7),
+      minFundAmount: ethers.BigNumber.from(1),
+      maxFundAmount: ethers.constants.MaxUint256,
+      deadline: ethers.constants.MaxUint256,
+      timestamp: ethers.BigNumber.from(timestamp2),
     });
   });
 
   step('Should manually redeem', async () => {
-    expect(await fund.activeInvestmentCount()).to.eq(1);
+    //TODO: Fix so redemptions can happen without time elapsing
+    expect(await fund.activeInvestmentCount()).to.eq(2);
+    const timeSkip = 86400; // 60 * 60 * 24 = 1 day in seconds
+    await network.provider.send('evm_increaseTime', [timeSkip]);
+    await network.provider.send('evm_mine');
     const permitAmount = await fund.redemptionUsdAmount(0);
     const signature = await signPermit(
       owner,
@@ -423,7 +625,7 @@ describe('Fund', () => {
       signature.r,
       signature.s,
     );
-    expect(await fund.activeInvestmentCount()).to.eq(0);
+    expect(await fund.activeInvestmentCount()).to.eq(1);
   });
 
   step(
@@ -440,12 +642,12 @@ describe('Fund', () => {
       await expect(
         fund
           .connect(wallets[3])
-          .updateInvestmentRequest(
+          .createOrUpdateInvestmentRequest(
             100,
             1,
             ethers.constants.MaxUint256,
             ethers.constants.MaxUint256,
-            0,
+            false,
             signature.v,
             signature.r,
             signature.s,
@@ -454,68 +656,139 @@ describe('Fund', () => {
     },
   );
 
-  // step('Should manual redeem and fail', async () => {
-  //   await expect(fund.addManualRedemption(1, true)).to.be.revertedWith(
-  //     'OpenRequestsPreventClosing',
-  //   );
-  // });
-  // step('Should increase time and process fees', async () => {
-  //   expect(await usdToken.balanceOf(fund.address)).to.eq(0);
-  //   await usdToken.approve(fund.address, ethers.constants.MaxUint256);
-  //   const investmentTimestamp = (await fund.investments(1)).timestamp;
-  //   const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
-  //   const fundAmountBefore = await fund.balanceOf(wallets[2].address);
-  //   await network.provider.request({
-  //     method: 'evm_increaseTime',
-  //     params: [timeSkip],
-  //   });
-  //   await fund.processFees([1], ethers.constants.MaxUint256);
-  //   const feeTimestamp = (await ethers.provider.getBlock('latest')).timestamp;
-  //   const mgmtFeeFundToken = new BigNumber(feeTimestamp)
-  //     .minus(investmentTimestamp.toString())
-  //     .div('31557600')
-  //     .times('0.02')
-  //     .times(fundAmountBefore.toString());
-  //   const mgmtFeeUsd = new BigNumber((await fund.aum()).toString())
-  //     .times(mgmtFeeFundToken)
-  //     .div((await fund.totalSupply()).toString());
-  //   // check usd balance of the fund
-  //   expect((await usdToken.balanceOf(fund.address)).toString()).to.eq(
-  //     mgmtFeeUsd.toFixed(0, BigNumber.ROUND_DOWN),
-  //   );
-  //   // check fund balance of the investor
-  //   expect((await fund.balanceOf(wallets[2].address)).toString()).to.eq(
-  //     new BigNumber(fundAmountBefore.toString())
-  //       .minus(mgmtFeeFundToken.toFixed(0, BigNumber.ROUND_DOWN))
-  //       .toFixed(0, BigNumber.ROUND_DOWN),
-  //   );
-  // });
+  step('Should manual redeem and fail', async () => {
+    const signature = await signPermit(
+      owner,
+      usdToken,
+      network.config.chainId || 1,
+      fund.address,
+      100,
+      ethers.constants.MaxUint256,
+    );
+    await expect(
+      fund.addManualRedemption(
+        0,
+        true,
+        ethers.constants.MaxUint256,
+        ethers.constants.MaxUint256,
+        signature.v,
+        signature.r,
+        signature.s,
+      ),
+    ).to.be.revertedWith('InvestmentRedeemed');
+  });
 
-  // step('Should update AUM', async () => {
-  //   await usdToken
-  //     .connect(wallets[3])
-  //     .transfer(owner.address, ethers.utils.parseUnits('100', 6));
-  //   const newAUM = await usdToken.balanceOf(owner.address);
-  //   await fund.updateAum(newAUM, ethers.constants.MaxUint256, '0x00');
-  //   expect(await fund.aum()).to.eq(newAUM);
-  // });
+  step('Should increase time and process fees', async () => {
+    expect(await usdToken.balanceOf(fund.address)).to.eq(0);
+    await usdToken.approve(fund.address, ethers.constants.MaxUint256);
+    const investment = await fund.investments(1);
 
-  // step('Should Process redemption requests', async function () {
-  //   const amountToInvest = ethers.utils.parseUnits('10000', 6);
+    const investmentTimestamp = investment.constants.timestamp;
+    const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+    const fundAmountBefore = await fund.balanceOf(
+      investment.constants.investor,
+    );
 
-  //   await usdToken
-  //     .connect(wallets[4])
-  //     .approve(fund.address, ethers.constants.MaxUint256);
-  //   await fund
-  //     .connect(wallets[4])
-  //     .invest(amountToInvest, '1', ethers.constants.MaxUint256);
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [timeSkip],
+    });
+    await fund.processFees([1]);
+    const feeTimestamp = (await ethers.provider.getBlock('latest')).timestamp;
+    const mgmtFeeFundToken = ethers.BigNumber.from(feeTimestamp)
+      .sub(investmentTimestamp.toString())
+      .div('31557600')
+      .mul('2')
+      .div('100')
+      .mul(investment.constants.managementFeeCostBasis);
 
-  //   await debug();
-  //   await fund.processRedemptions([1], '1', ethers.constants.MaxUint256);
-  //   await debug();
-  //   await fund.processRedemptions([2], '1', ethers.constants.MaxUint256);
-  //   await debug();
-  // });
+    const mgmtFeeUsd = ethers.BigNumber.from(
+      investment.constants.managementFeeCostBasis,
+    )
+      .mul(mgmtFeeFundToken)
+      .div(await fund.totalSupply());
+    // // check usd balance of the fund
+    expect(await usdToken.balanceOf(fund.address)).to.eq(mgmtFeeUsd);
+    const investmentAfter = await fund.investments(1);
+
+    // check fund balance of the investor
+    expect(await fund.balanceOf(investment.constants.investor)).to.eq(
+      ethers.BigNumber.from(fundAmountBefore)
+        .sub(investmentAfter.fundManagementFeesSwept)
+        .sub(investmentAfter.fundPerformanceFeesSwept)
+        .add(investment.fundManagementFeesSwept)
+        .add(investment.fundPerformanceFeesSwept),
+    );
+
+    // expect(await fund.balanceOf(investment.constants.investor)).to.eq(
+    //   ethers.BigNumber.from(fundAmountBefore).sub(
+    //     await usdToken.balanceOf(fund.address),
+    //   ),
+    // );
+  });
+
+  step('Should update AUM', async () => {
+    await usdToken
+      .connect(wallets[3])
+      .transfer(owner.address, ethers.utils.parseUnits('100', 6));
+    const newAUM = await usdToken.balanceOf(owner.address);
+    await fund.updateAum(newAUM, '0x00');
+    const navLength = await fund.navsLength();
+    const nav = await fund.navs(navLength.sub(1));
+    expect(nav.aum).to.eq(newAUM);
+  });
+
+  step('Should Process redemption requests', async function () {
+    const amountToInvest = ethers.utils.parseUnits('1000', 6);
+    await fund.addManualInvestment(wallets[6].address, amountToInvest);
+    await fund.addManualInvestment(wallets[7].address, amountToInvest);
+    await fund.addManualInvestment(wallets[8].address, amountToInvest);
+    // await debug();
+    const activeInvestments = (await fund.activeInvestmentCount()).toNumber();
+    const investmentsLength = (await fund.investmentsLength()).toNumber();
+    for (var i = investmentsLength - 1; i > investmentsLength - 3 - 1; i--) {
+      const permitAmount = await fund.redemptionUsdAmount(i);
+      const signature = await signPermit(
+        owner,
+        usdToken,
+        network.config.chainId || 1,
+        fund.address,
+        permitAmount,
+        ethers.constants.MaxUint256,
+      );
+      await fund.addManualRedemption(
+        i,
+        true,
+        permitAmount,
+        ethers.constants.MaxUint256,
+        signature.v,
+        signature.r,
+        signature.s,
+      );
+    }
+    expect(await fund.activeInvestmentCount()).to.eq(activeInvestments - 3);
+  });
+
+  step('Should Process lots and lots of investments', async function () {
+    const amountToInvest = ethers.utils.parseUnits('1000', 6);
+    var i = 0;
+    for (i; i < 10; i++) {
+      await usdToken.connect(owner).faucet(amountToInvest);
+      await fund.addManualInvestment(wallets[6].address, amountToInvest);
+      await fund.addManualInvestment(wallets[7].address, amountToInvest);
+      await fund.addManualInvestment(wallets[8].address, amountToInvest);
+    }
+    const timeSkip = 2592000; // 60 * 60 * 24 * 30 = 30 days in seconds
+
+    await network.provider.request({
+      method: 'evm_increaseTime',
+      params: [timeSkip],
+    });
+    await fund.processFees([
+      8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28, 29, 30,
+    ]);
+  });
 
   // step('Should close fund', async function () {
   //   await debug();
@@ -523,31 +796,31 @@ describe('Fund', () => {
   //   await debug();
   // });
 
-  const debug = async () => {
-    console.log('AUM', ethers.utils.formatUnits(await fund.aum(), 6));
-    console.log(
-      'SUPPLY',
-      ethers.utils.formatUnits(await fund.totalSupply(), 6),
-    );
-    console.log(
-      'OWNER',
-      ethers.utils.formatUnits(await fund.balanceOf(owner.address), 6),
-    );
-    console.log(
-      'WALLET 1 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[1].address), 6),
-    );
-    console.log(
-      'WALLET 2 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[2].address), 6),
-    );
-    console.log(
-      'WALLET 3 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[3].address), 6),
-    );
-    console.log(
-      'WALLET 4 BALANCE',
-      ethers.utils.formatUnits(await fund.balanceOf(wallets[4].address), 6),
-    );
-  };
+  // const debug = async () => {
+  //   console.log('AUM', ethers.utils.formatUnits(await fund.aum(), 6));
+  //   console.log(
+  //     'SUPPLY',
+  //     ethers.utils.formatUnits(await fund.totalSupply(), 6),
+  //   );
+  //   console.log(
+  //     'OWNER',
+  //     ethers.utils.formatUnits(await fund.balanceOf(owner.address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 1 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[1].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 2 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[2].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 3 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[3].address), 6),
+  //   );
+  //   console.log(
+  //     'WALLET 4 BALANCE',
+  //     ethers.utils.formatUnits(await fund.balanceOf(wallets[4].address), 6),
+  //   );
+  // };
 });

@@ -2,12 +2,12 @@
 
 pragma solidity ^0.8.7;
 
-import '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-import '@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol';
-import '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
+import { ERC20Permit } from '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
+import { UUPSUpgradeable } from '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
+import { OwnableUpgradeable } from '@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol';
+import { ERC1967Proxy } from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
 
-import './FundV0.sol';
+import { FundV0 } from './FundV0.sol';
 
 /*
 Upgrade notes:
@@ -70,7 +70,7 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
 
   function newFund(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
-    uint256[7] memory uintParams, // timelock, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, feeTimelock
+    uint256[9] memory uintParams, // timelock, feeTimelock, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
     string memory name,
     string memory symbol,
     string memory logoUrl,
@@ -97,7 +97,9 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
       contactInfo,
       tags,
       usingUsdToken,
-      msg.sender
+      msg.sender,
+      this,
+      usdToken
     );
     address fundAddress = address(fundProxy);
     funds.push(fundAddress);

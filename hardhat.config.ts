@@ -4,8 +4,12 @@ import '@typechain/hardhat';
 import '@openzeppelin/hardhat-upgrades';
 import { HardhatUserConfig } from 'hardhat/config';
 
+import './plugin-abi-export';
+import './plugin-bytecode-size';
+
 const config: HardhatUserConfig = {
   networks: {
+    hardhat: { allowUnlimitedContractSize: true },
     rinkeby: {
       url: `https://rinkeby.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
@@ -22,13 +26,11 @@ const config: HardhatUserConfig = {
       chainId: 80001,
       url: `https://polygon-mumbai.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
-      gasPrice: 8000000000, // TODO: change this every deploy
     },
     polygon: {
       chainId: 137,
       url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: { mnemonic: process.env.MNEMONIC },
-      gasPrice: 8000000000, // TODO: change this every deploy
     },
   },
   solidity: {
