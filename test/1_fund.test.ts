@@ -91,24 +91,9 @@ describe('Fund upgradeability', () => {
       initializer: false,
     });
     await fundProxy.deployed();
-    // storage slot of implementation is
-    // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))
-    // see EIP-1967
-    const fundImplementationHex = await ethers.provider.getStorageAt(
-      fundProxy.address,
-      ethers.utils.hexValue(
-        ethers.BigNumber.from(
-          ethers.utils.keccak256(
-            ethers.utils.toUtf8Bytes('eip1967.proxy.implementation'),
-          ),
-        ).sub(1),
-      ),
-    );
-    const fundImplementationAddress = ethers.utils.hexDataSlice(
-      fundImplementationHex,
-      12,
-    );
 
+    const fundImplementationAddress =
+      await upgrades.erc1967.getImplementationAddress(fundProxy.address);
     // initialize the implementation to mitigate someone else executing functions on it
     const fundImplementation = FundV0__factory.connect(
       fundImplementationAddress,
@@ -116,7 +101,17 @@ describe('Fund upgradeability', () => {
     );
     await fundImplementation.initialize(
       [ethers.constants.AddressZero, ethers.constants.AddressZero],
-      [0, 0, 0, 0, 0, 0, ethers.constants.MaxUint256, 1e9, 0],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ethers.constants.MaxUint256,
+        '1000000000000000000000',
+        0,
+      ],
       '',
       '',
       '',
@@ -164,7 +159,7 @@ describe('Fund upgradeability', () => {
     fund = FundV0__factory.connect(fundInstance.address, owner);
     const tx = await registry.newFund(
       [owner.address, wallets[5].address],
-      [1, 200, 2000, 20, 5, 10, 1e6, 1e5, 0],
+      [1, 200, 2000, 20, 5, 10, 1e7, '100000000000000000', 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -231,7 +226,7 @@ describe('Fund', () => {
 
     await fund.initialize(
       [owner.address, wallets[5].address],
-      [1, 200, 200, 2000, 10, 10, 1e6, 1e5, 0],
+      [1, 200, 200, 2000, 10, 10, 1e7, '100000000000000000', 0],
       'Bobs cool fund',
       'BCF',
       'https://google.com/favicon.ico',
@@ -243,7 +238,7 @@ describe('Fund', () => {
       usdToken.address,
     );
 
-    expect(await fund.initialPrice()).to.eq(1e5);
+    expect(await fund.initialPrice()).to.eq('100000000000000000');
     await expect(fund.navs(0)).to.be.reverted; // no nav set yet
     expect(await fund.investorCount()).to.eq(0);
     expect(await fund.activeInvestmentCount()).to.eq(0);
@@ -539,13 +534,13 @@ describe('Fund', () => {
       usdToken,
       network.config.chainId || 1,
       fund.address,
-      1e6,
+      1e7,
       ethers.constants.MaxUint256,
     );
     await fund
       .connect(wallets[3])
       .createOrUpdateInvestmentRequest(
-        1e6,
+        1e7,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
@@ -557,7 +552,7 @@ describe('Fund', () => {
     const request1 = await fund.investmentRequests(1);
     const timestamp1 = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request1 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(1e6),
+      usdAmount: ethers.BigNumber.from(1e7),
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,
@@ -568,13 +563,13 @@ describe('Fund', () => {
       usdToken,
       network.config.chainId || 1,
       fund.address,
-      2e6,
+      2e7,
       ethers.constants.MaxUint256,
     );
     await fund
       .connect(wallets[3])
       .createOrUpdateInvestmentRequest(
-        2e6,
+        2e7,
         1,
         ethers.constants.MaxUint256,
         ethers.constants.MaxUint256,
@@ -586,7 +581,7 @@ describe('Fund', () => {
     const request2 = await fund.investmentRequests(2);
     const timestamp2 = (await ethers.provider.getBlock('latest')).timestamp;
     expect({ ...request2 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(2e6),
+      usdAmount: ethers.BigNumber.from(2e7),
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,
@@ -598,7 +593,7 @@ describe('Fund', () => {
     expect(investor.investmentRequestId).to.eq(ethers.constants.MaxUint256);
     const request3 = await fund.investmentRequests(2);
     expect({ ...request3 }).to.deep.include({
-      usdAmount: ethers.BigNumber.from(2e6),
+      usdAmount: ethers.BigNumber.from(2e7),
       minFundAmount: ethers.BigNumber.from(1),
       maxFundAmount: ethers.constants.MaxUint256,
       deadline: ethers.constants.MaxUint256,

@@ -31,7 +31,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   uint256 internal _maxInvestors;
   uint256 internal _maxInvestmentsPerInvestor;
   uint256 internal _minInvestmentAmount; // in usd token decimals
-  uint256 internal _initialPrice; // starting token price in (usd / token) * 1e6
+  uint256 internal _initialPrice; // starting token price in (usd / token) * 1e18
   string internal _logoUrl;
   string internal _contactInfo;
   string internal _tags;
@@ -74,6 +74,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 initialUsdAmount; // dollar value at time of investment
     uint256 initialFundAmount; // tokens minted at time of investment
     uint256 initialHighWaterMark; // same as initialUsdAmount unless imported
+    uint256 initialLastFeeSweepTimestamp;
     uint256 managementFeeCostBasis; // dollar value used for calculating management fees. same as initialUsdAmount unless imported
     uint256 investmentRequestId; // id of the request that started it, or max uint if it's a manual investment
     bool usdTransferred; // whether usd was transferred through the fund contract at time of investment
@@ -88,6 +89,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 fundManagementFeesSwept; // total fund tokens paid for management fees, can differ wildly from above because of price changes
     uint256 fundPerformanceFeesSwept; // total fund tokens paid for performance fees
     uint256 highWaterMark; // cannot charge performance fee unless investment value is higher than this at time of fee processing, pull out management fees before comparing
+    uint256 lastFeeSweepTimestamp; // timestamp of the last fee sweep
     uint256[] feeSweepIds; // ids of all fee sweeps that have occurred on this investment, use latest one to get timestamp of latest sweep
     uint256 feeSweepsCount; // number of fee sweeps that have occurred, equal to length of feeSweepIds
     // redemption related variables
@@ -103,9 +105,10 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 indexed investmentRequestId,
     uint256 usdAmount,
     uint256 fundAmount,
-    uint256 initialHighWaterMark,
+    uint256 highWaterMark,
     uint256 managementFeeCostBasis,
     uint256 lockupTimestamp,
+    uint256 lastFeeSweepTimestamp,
     bool imported,
     bool usdTransferred
   );
@@ -312,11 +315,11 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _maxInvestors = uintParams[4];
     _maxInvestmentsPerInvestor = uintParams[5];
     _minInvestmentAmount = uintParams[6];
-    if (_minInvestmentAmount < 1e6) {
+    if (_minInvestmentAmount < 1e7) {
       revert InvalidMinInvestmentAmount();
     }
     _initialPrice = uintParams[7];
-    if (_initialPrice < 1e4 || _initialPrice > 1e9) {
+    if (_initialPrice < 1e14 || _initialPrice > 1e21) {
       revert InvalidInitialPrice();
     }
     // initial aum
@@ -325,12 +328,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       uint256 usdAmount = uintParams[8];
       _addInvestment(
         _manager,
-        block.timestamp,
         usdAmount,
         _calcFundAmount(usdAmount),
         block.timestamp,
         usdAmount,
         usdAmount,
+        0,
         type(uint256).max,
         false,
         false
@@ -529,7 +532,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       fundAmount = (usdAmount * nav.supply) / nav.aum;
     } else {
       // use initial price
-      fundAmount = (usdAmount * 1e6) / _initialPrice;
+      fundAmount = (usdAmount * 1e18) / _initialPrice;
     }
   }
 
@@ -544,7 +547,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       usdAmount = (fundAmount * nav.aum) / nav.supply;
     } else {
       // use initial price
-      usdAmount = (fundAmount * _initialPrice) / 1e6;
+      usdAmount = (fundAmount * _initialPrice) / 1e18;
     }
   }
 
@@ -705,12 +708,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
 
   function _addInvestment(
     address investor,
-    uint256 timestamp,
     uint256 usdAmount,
     uint256 fundAmount,
     uint256 lockupTimestamp,
     uint256 highWaterMark,
     uint256 managementFeeCostBasis,
+    uint256 lastFeeSweepTimestamp,
     uint256 investmentRequestId,
     bool transferUsd,
     bool imported
@@ -733,11 +736,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     {
       Investment storage investment = _investments.push();
       investment.constants.investor = investor;
-      investment.constants.timestamp = timestamp;
+      investment.constants.timestamp = block.timestamp;
       investment.constants.lockupTimestamp = lockupTimestamp;
       investment.constants.initialUsdAmount = usdAmount;
       investment.constants.initialFundAmount = fundAmount;
       investment.constants.initialHighWaterMark = highWaterMark;
+      investment.constants.initialLastFeeSweepTimestamp = lastFeeSweepTimestamp;
       investment.constants.managementFeeCostBasis = managementFeeCostBasis;
       investment.constants.investmentRequestId = investmentRequestId;
       investment.constants.usdTransferred = transferUsd;
@@ -748,6 +752,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       // investment.fundManagementFeesSwept= 0;
       // investment.fundPerformanceFeesSwept= 0;
       investment.highWaterMark = highWaterMark;
+      investment.lastFeeSweepTimestamp = lastFeeSweepTimestamp;
       // investment.feeSweepIds= new uint256[](0);
       // investment.feeSweepsCount= 0;
       investment.redemptionRequestId = type(uint256).max;
@@ -766,6 +771,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       highWaterMark,
       managementFeeCostBasis,
       lockupTimestamp,
+      lastFeeSweepTimestamp,
       imported,
       transferUsd
     );
@@ -812,12 +818,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     _addInvestment(
       investmentRequest.investor,
-      block.timestamp,
       investmentRequest.usdAmount,
       fundAmount,
       block.timestamp,
       investmentRequest.usdAmount,
       investmentRequest.usdAmount,
+      0,
       investmentRequestId,
       true,
       false
@@ -838,12 +844,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     _addInvestment(
       investor,
-      block.timestamp,
       usdAmount,
       _calcFundAmount(usdAmount),
       block.timestamp,
       usdAmount,
       usdAmount,
+      0,
       type(uint256).max,
       false,
       false
@@ -863,12 +869,12 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     _addInvestment(
       investor,
-      lastFeeSweepTimestamp,
       usdAmountRemaining,
       _calcFundAmount(usdAmountRemaining),
       lockupTimestamp,
       highWaterMark,
       originalUsdAmount,
+      lastFeeSweepTimestamp,
       type(uint256).max,
       false,
       true
@@ -1107,7 +1113,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     view
     returns (uint256 usdAmount)
   {
-    (, uint256 fundManagementFee, , uint256 fundPerformanceFee, , ) = _calcFees(
+    (, uint256 fundManagementFee, , uint256 fundPerformanceFee, ) = _calcFees(
       investmentId
     );
     usdAmount = _calcUsdAmount(
@@ -1147,19 +1153,17 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       uint256 fundManagementFee,
       uint256 usdPerformanceFee,
       uint256 fundPerformanceFee,
-      uint256 highWaterMark,
-      uint256 lastSweepTimestamp
+      uint256 highWaterMark
     )
   {
     Investment storage investment = _investments[investmentId];
-    // if there was a fee sweep already, use the timestamp of the latest one instead
-    if (investment.feeSweepsCount > 0) {
-      lastSweepTimestamp = _feeSweeps[
-        investment.feeSweepIds[investment.feeSweepsCount - 1]
-      ].timestamp;
-    } else {
-      lastSweepTimestamp = investment.constants.timestamp;
+    if (investment.redemptionId != type(uint256).max) {
+      revert InvestmentRedeemed();
     }
+    // if there was a fee sweep already, use the timestamp of the latest one instead
+    uint256 lastSweepTimestamp = investment.lastFeeSweepTimestamp > 0
+      ? investment.lastFeeSweepTimestamp
+      : investment.constants.timestamp;
     // calc management fee
     usdManagementFee =
       (investment.constants.managementFeeCostBasis *
@@ -1189,25 +1193,19 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       uint256 fundManagementFee,
       uint256 usdPerformanceFee,
       uint256 fundPerformanceFee,
-      uint256 highWaterMark,
-      uint256 lastSweepTimestamp
+      uint256 highWaterMark
     ) = _calcFees(investmentId);
     Investment storage investment = _investments[investmentId];
     // if this investment previously had a sweep and it happened later than the most recent sweep period ended, then revert to avoid double sweeping
-    if (
-      investment.feeSweepsCount > 0 &&
-      lastSweepTimestamp > _lastFeeSweepEndedTimestamp
-    ) {
+    if (investment.lastFeeSweepTimestamp > _lastFeeSweepEndedTimestamp) {
       revert AlreadySweepedThisPeriod();
     }
-    address burnFrom = investment.constants.investor;
-    if (burnFrom == _manager) {
-      burnFrom = address(this);
+    address from = investment.constants.investor;
+    if (from == _manager) {
+      from = address(this);
     }
-    _burn(burnFrom, fundManagementFee);
-    _mint(address(this), fundManagementFee);
-    _burn(burnFrom, fundPerformanceFee);
-    _mint(address(this), fundPerformanceFee);
+    _transfer(from, address(this), fundManagementFee);
+    _transfer(from, address(this), fundPerformanceFee);
     uint256 feeSweepId = _feeSweeps.length;
     uint256 fundAmount = fundManagementFee + fundPerformanceFee;
     _feesSweptNotWithdrawn += fundAmount;
@@ -1217,6 +1215,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     investment.fundManagementFeesSwept += fundManagementFee;
     investment.fundPerformanceFeesSwept += fundPerformanceFee;
     investment.highWaterMark = highWaterMark;
+    investment.lastFeeSweepTimestamp = block.timestamp;
     investment.feeSweepsCount++;
     investment.feeSweepIds.push(feeSweepId);
     _feeSweeps.push(
@@ -1380,14 +1379,31 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   //   }
   // }
 
-  function _beforeTokenTransfer(
-    address from,
-    address to,
+  // function _beforeTokenTransfer(
+  //   address from,
+  //   address to,
+  //   uint256 amount
+  // ) internal override {
+  //   super._beforeTokenTransfer(from, to, amount);
+  //   if (from != address(0) && to != address(0)) {
+  //     revert NotTransferable(); // Token is not transferable
+  //   }
+  // }
+
+  function transfer(address recipient, uint256 amount)
+    public
+    virtual
+    override
+    returns (bool)
+  {
+    revert NotTransferable();
+  }
+
+  function transferFrom(
+    address sender,
+    address recipient,
     uint256 amount
-  ) internal override {
-    super._beforeTokenTransfer(from, to, amount);
-    if (from != address(0) && to != address(0)) {
-      revert NotTransferable(); // Token is not transferable
-    }
+  ) public virtual override returns (bool) {
+    revert NotTransferable();
   }
 }
