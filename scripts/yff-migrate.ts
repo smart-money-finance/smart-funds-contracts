@@ -1,4 +1,3 @@
-import { writeFile } from 'fs/promises';
 import { ethers, network } from 'hardhat';
 import { BigNumber } from 'bignumber.js';
 
@@ -49,6 +48,11 @@ async function main() {
   buyStats.sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
+  // console.log(buyStats.length);
+  // return;
+  if (buyStats.length !== 62) {
+    throw new Error('stats fetch failed');
+  }
   // console.log(buyStats);
   const sweepTime = Math.floor(
     new Date('2020-12-22T00:35:03.000Z').getTime() / 1000,
@@ -157,14 +161,16 @@ async function main() {
   // 2020-12-22T00:35:03.000Z
   // 2020-12-22T00:35:03.000Z
   const signers = await ethers.getSigners();
+  const managerSigner = signers[2];
+  const managerAddress = managerSigner.address;
   const registry = RegistryV0__factory.connect(
     '0xC494674A966B136F24a6EDDF396F992a0BfF4409',
-    signers[2],
+    managerSigner,
   );
   const tx = await registry.newFund(
-    [signers[2].address, ethers.constants.AddressZero],
+    [managerAddress, ethers.constants.AddressZero],
     [
-      '31536000',
+      '31104000',
       '2592000',
       '200',
       '2000',
@@ -185,7 +191,7 @@ async function main() {
   const fundAddress = receipt.events?.find(
     (event) => event.event === 'FundCreated',
   )?.args?.fund;
-  const fund = FundV0__factory.connect(fundAddress, signers[2]);
+  const fund = FundV0__factory.connect(fundAddress, managerSigner);
   for (const investment of importedInvestments) {
     console.log(investment.lockupTimestamp);
     const tx = await fund.importInvestment(
@@ -203,10 +209,18 @@ async function main() {
     dollarValueRemainingInFeeWallet.dp(6).toString(),
     6,
   );
-  const tx2 = await fund.addManualInvestment(
-    signers[5].address,
+  const tx2 = await fund.importInvestment(
+    managerAddress,
     usdRemainingInFeeWallet,
+    Math.floor(new Date().getTime() / 1000),
+    usdRemainingInFeeWallet,
+    usdRemainingInFeeWallet,
+    0,
   );
+  // const tx2 = await fund.addManualInvestment(
+  //   managerAddress,
+  //   usdRemainingInFeeWallet,
+  // );
   await tx2.wait();
   console.log('done');
 }
