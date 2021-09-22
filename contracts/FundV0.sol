@@ -273,9 +273,9 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   error InvalidTimelock();
   error NotEnoughFees();
   error NoLongerImportingInvestments();
-  error ManagerCannotCreateRequests();
+  error CustodianCannotCreateRequests();
   error RequestOutOfDate();
-  error CannotTransferUsdToManager();
+  error CannotTransferUsdToCustodian();
   error AlreadySweepedThisPeriod();
   error InvalidFeeTimestamp();
 
@@ -378,14 +378,14 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  function _notManager() internal view {
-    if (msg.sender == _manager) {
-      revert ManagerCannotCreateRequests();
+  function _notCustodian() internal view {
+    if (msg.sender == _custodian) {
+      revert CustodianCannotCreateRequests();
     }
   }
 
-  modifier notManager() {
-    _notManager();
+  modifier notCustodian() {
+    _notCustodian();
     _;
   }
 
@@ -573,9 +573,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     if (_investorInfo[investor].whitelisted) {
       revert AlreadyWhitelisted();
     }
-    if (investor == _manager) {
-      revert InvalidInvestor();
-    }
     if (
       _investors.length <= _investorInfo[investor].investorId ||
       _investors[_investorInfo[investor].investorId] != investor
@@ -627,7 +624,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public onlyWhitelisted notManager {
+  ) public onlyWhitelisted notCustodian {
     if (
       update &&
       _investorInfo[msg.sender].investmentRequestId == type(uint256).max
@@ -857,7 +854,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 minUsdAmount,
     uint256 deadline,
     bool update // used to prevent race conditions
-  ) public onlyWhitelisted onlyValidInvestmentId(investmentId) notManager {
+  ) public onlyWhitelisted onlyValidInvestmentId(investmentId) notCustodian {
     Investment storage investment = _investments[investmentId];
     if (update && investment.redemptionRequestId == type(uint256).max) {
       revert NoExistingRequest();
@@ -1049,8 +1046,8 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 s
   ) public onlyValidInvestmentId(investmentId) {
     Investment storage investment = _investments[investmentId];
-    if (investment.constants.investor == _manager && transferUsd) {
-      revert CannotTransferUsdToManager();
+    if (investment.constants.investor == _custodian && transferUsd) {
+      revert CannotTransferUsdToCustodian();
     }
     if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
