@@ -164,7 +164,7 @@ async function main() {
   const managerSigner = signers[2];
   const managerAddress = managerSigner.address;
   const registry = RegistryV0__factory.connect(
-    '0x2F396E3220B1B0eef11084956361B8D387655125',
+    '0x7d4Abe6b945102D3A111BA0e68c78E8F5e3b6b54',
     managerSigner,
   );
   const tx = await registry.newFund(
