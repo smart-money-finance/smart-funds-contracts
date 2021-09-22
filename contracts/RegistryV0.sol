@@ -32,8 +32,8 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
     address indexed fund,
     address indexed manager,
     address custodian,
-    address[2] addressParams,
-    uint256[9] uintParams,
+    address[2] addressParams, // aumUpdater, feeBeneficiary
+    uint256[9] uintParams, // timelock, feeSweepInterval, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
     bool usingUsdToken,
     string name,
     string symbol,

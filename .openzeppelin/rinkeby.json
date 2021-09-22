@@ -10,6 +10,16 @@
       "address": "0x380C3cBAc137FB7509De4Bcd9fafF1b96db25aff",
       "txHash": "0x343520f63361c266cd4590c2712302a88e870d2dc2524edb461169f85e9b0212",
       "kind": "uups"
+    },
+    {
+      "address": "0xb4268894b476e5772a4E5B420E03881e8fD3d1dC",
+      "txHash": "0xeb6799cdfa1fb10ef36707b581537da2c1af5b4a41f7d95c264c3cc79dd2abea",
+      "kind": "uups"
+    },
+    {
+      "address": "0xF897B0F4234dD33411C7EA9CbB2DeA091640b24C",
+      "txHash": "0x195af265a91cd686cde4f8b8e63c947c5abbc73b889abd815913834a2b1481ce",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -866,6 +876,885 @@
             "label": "contract FundV0[]"
           },
           "t_contract(FundV0)9318": {
+            "label": "contract FundV0"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]"
+          }
+        }
+      }
+    },
+    "cd0e8bc0c96f274835816759b0e199dbb6c2ecd0c96add12a761bc060c250fa5": {
+      "address": "0x2c66C7F9F7976AA78eA4082e2997e1c9B276E2F4",
+      "txHash": "0xf6506f0e6cf359c696e4023d834c63b60a94be51d03cf858c76da33ec132fc26",
+      "layout": {
+        "storage": [
+          {
+            "contract": "Initializable",
+            "label": "_initialized",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
+          },
+          {
+            "contract": "Initializable",
+            "label": "_initializing",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
+          },
+          {
+            "contract": "ContextUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "_balances",
+            "type": "t_mapping(t_address,t_uint256)",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:36"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "_allowances",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:38"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "_totalSupply",
+            "type": "t_uint256",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:40"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "_name",
+            "type": "t_string_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:42"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "_symbol",
+            "type": "t_string_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:43"
+          },
+          {
+            "contract": "ERC20Upgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)45_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol:361"
+          },
+          {
+            "contract": "EIP712Upgradeable",
+            "label": "_HASHED_NAME",
+            "type": "t_bytes32",
+            "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/draft-EIP712Upgradeable.sol:29"
+          },
+          {
+            "contract": "EIP712Upgradeable",
+            "label": "_HASHED_VERSION",
+            "type": "t_bytes32",
+            "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/draft-EIP712Upgradeable.sol:30"
+          },
+          {
+            "contract": "EIP712Upgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/draft-EIP712Upgradeable.sol:111"
+          },
+          {
+            "contract": "ERC20PermitUpgradeable",
+            "label": "_nonces",
+            "type": "t_mapping(t_address,t_struct(Counter)2552_storage)",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:25"
+          },
+          {
+            "contract": "ERC20PermitUpgradeable",
+            "label": "_PERMIT_TYPEHASH",
+            "type": "t_bytes32",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:28"
+          },
+          {
+            "contract": "ERC20PermitUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)49_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:93"
+          },
+          {
+            "contract": "ERC20VotesUpgradeable",
+            "label": "_delegates",
+            "type": "t_mapping(t_address,t_address)",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:39"
+          },
+          {
+            "contract": "ERC20VotesUpgradeable",
+            "label": "_checkpoints",
+            "type": "t_mapping(t_address,t_array(t_struct(Checkpoint)1363_storage)dyn_storage)",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:40"
+          },
+          {
+            "contract": "ERC20VotesUpgradeable",
+            "label": "_totalSupplyCheckpoints",
+            "type": "t_array(t_struct(Checkpoint)1363_storage)dyn_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:41"
+          },
+          {
+            "contract": "ERC20VotesUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)47_storage",
+            "src": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol:262"
+          },
+          {
+            "contract": "ERC1967UpgradeUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
+          },
+          {
+            "contract": "UUPSUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:80"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_registry",
+            "type": "t_contract(RegistryV0)9654",
+            "src": "contracts/FundV0.sol:19"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_usdToken",
+            "type": "t_contract(ERC20Permit)4959",
+            "src": "contracts/FundV0.sol:20"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_manager",
+            "type": "t_address",
+            "src": "contracts/FundV0.sol:23"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_custodian",
+            "type": "t_address",
+            "src": "contracts/FundV0.sol:24"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_aumUpdater",
+            "type": "t_address",
+            "src": "contracts/FundV0.sol:25"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feeBeneficiary",
+            "type": "t_address",
+            "src": "contracts/FundV0.sol:26"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_timelock",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:27"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feeSweepInterval",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:28"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_managementFee",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:29"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_performanceFee",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:30"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_maxInvestors",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:31"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_maxInvestmentsPerInvestor",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:32"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_minInvestmentAmount",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:33"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_initialPrice",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:34"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_logoUrl",
+            "type": "t_string_storage",
+            "src": "contracts/FundV0.sol:35"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_contactInfo",
+            "type": "t_string_storage",
+            "src": "contracts/FundV0.sol:36"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_tags",
+            "type": "t_string_storage",
+            "src": "contracts/FundV0.sol:37"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_usingUsdToken",
+            "type": "t_bool",
+            "src": "contracts/FundV0.sol:38"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_navs",
+            "type": "t_array(t_struct(Nav)6016_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:47"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investorInfo",
+            "type": "t_mapping(t_address,t_struct(Investor)6044_storage)",
+            "src": "contracts/FundV0.sol:63"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investors",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/FundV0.sol:64"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investorCount",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:65"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investments",
+            "type": "t_array(t_struct(Investment)6112_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:99"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_activeInvestmentCount",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:100"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_doneImportingInvestments",
+            "type": "t_bool",
+            "src": "contracts/FundV0.sol:101"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feeSweeps",
+            "type": "t_array(t_struct(FeeSweep)6161_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:127"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_lastFeeSweepEndedTimestamp",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:128"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investmentsSweptSinceStarted",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:129"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feeSweeping",
+            "type": "t_bool",
+            "src": "contracts/FundV0.sol:130"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feeWithdrawals",
+            "type": "t_array(t_struct(FeeWithdrawal)6204_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:151"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_feesSweptNotWithdrawn",
+            "type": "t_uint256",
+            "src": "contracts/FundV0.sol:152"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_investmentRequests",
+            "type": "t_array(t_struct(InvestmentRequest)6237_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:170"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_redemptionRequests",
+            "type": "t_array(t_struct(RedemptionRequest)6272_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:191"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_redemptions",
+            "type": "t_array(t_struct(Redemption)6309_storage)dyn_storage",
+            "src": "contracts/FundV0.sol:213"
+          },
+          {
+            "contract": "FundV0",
+            "label": "_closed",
+            "type": "t_bool",
+            "src": "contracts/FundV0.sol:224"
+          }
+        ],
+        "types": {
+          "t_contract(RegistryV0)9654": {
+            "label": "contract RegistryV0"
+          },
+          "t_contract(ERC20Permit)4959": {
+            "label": "contract ERC20Permit"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_string_storage": {
+            "label": "string"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_array(t_struct(Nav)6016_storage)dyn_storage": {
+            "label": "struct FundV0.Nav[]"
+          },
+          "t_struct(Nav)6016_storage": {
+            "label": "struct FundV0.Nav",
+            "members": [
+              {
+                "label": "aum",
+                "type": "t_uint256"
+              },
+              {
+                "label": "supply",
+                "type": "t_uint256"
+              },
+              {
+                "label": "totalCapitalContributed",
+                "type": "t_uint256"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage"
+              }
+            ]
+          },
+          "t_mapping(t_address,t_struct(Investor)6044_storage)": {
+            "label": "mapping(address => struct FundV0.Investor)"
+          },
+          "t_struct(Investor)6044_storage": {
+            "label": "struct FundV0.Investor",
+            "members": [
+              {
+                "label": "whitelisted",
+                "type": "t_bool"
+              },
+              {
+                "label": "investorId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "activeInvestmentCount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "investmentRequestId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "investmentIds",
+                "type": "t_array(t_uint256)dyn_storage"
+              }
+            ]
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_array(t_struct(Investment)6112_storage)dyn_storage": {
+            "label": "struct FundV0.Investment[]"
+          },
+          "t_struct(Investment)6112_storage": {
+            "label": "struct FundV0.Investment",
+            "members": [
+              {
+                "label": "constants",
+                "type": "t_struct(InvestmentConstants)6085_storage"
+              },
+              {
+                "label": "remainingFundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdManagementFeesSwept",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdPerformanceFeesSwept",
+                "type": "t_uint256"
+              },
+              {
+                "label": "fundManagementFeesSwept",
+                "type": "t_uint256"
+              },
+              {
+                "label": "fundPerformanceFeesSwept",
+                "type": "t_uint256"
+              },
+              {
+                "label": "highWaterMark",
+                "type": "t_uint256"
+              },
+              {
+                "label": "lastFeeSweepTimestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "feeSweepIds",
+                "type": "t_array(t_uint256)dyn_storage"
+              },
+              {
+                "label": "feeSweepsCount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "redemptionRequestId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "redemptionId",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_struct(InvestmentConstants)6085_storage": {
+            "label": "struct FundV0.InvestmentConstants",
+            "members": [
+              {
+                "label": "investor",
+                "type": "t_address"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "lockupTimestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "initialUsdAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "initialFundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "initialHighWaterMark",
+                "type": "t_uint256"
+              },
+              {
+                "label": "initialLastFeeSweepTimestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "managementFeeCostBasis",
+                "type": "t_uint256"
+              },
+              {
+                "label": "investmentRequestId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdTransferred",
+                "type": "t_bool"
+              },
+              {
+                "label": "imported",
+                "type": "t_bool"
+              }
+            ]
+          },
+          "t_array(t_struct(FeeSweep)6161_storage)dyn_storage": {
+            "label": "struct FundV0.FeeSweep[]"
+          },
+          "t_struct(FeeSweep)6161_storage": {
+            "label": "struct FundV0.FeeSweep",
+            "members": [
+              {
+                "label": "investmentId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "highWaterMark",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdManagementFee",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdPerformanceFee",
+                "type": "t_uint256"
+              },
+              {
+                "label": "fundManagementFee",
+                "type": "t_uint256"
+              },
+              {
+                "label": "fundPerformanceFee",
+                "type": "t_uint256"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_array(t_struct(FeeWithdrawal)6204_storage)dyn_storage": {
+            "label": "struct FundV0.FeeWithdrawal[]"
+          },
+          "t_struct(FeeWithdrawal)6204_storage": {
+            "label": "struct FundV0.FeeWithdrawal",
+            "members": [
+              {
+                "label": "to",
+                "type": "t_address"
+              },
+              {
+                "label": "fundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdTransferred",
+                "type": "t_bool"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_array(t_struct(InvestmentRequest)6237_storage)dyn_storage": {
+            "label": "struct FundV0.InvestmentRequest[]"
+          },
+          "t_struct(InvestmentRequest)6237_storage": {
+            "label": "struct FundV0.InvestmentRequest",
+            "members": [
+              {
+                "label": "investor",
+                "type": "t_address"
+              },
+              {
+                "label": "usdAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "minFundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "maxFundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "deadline",
+                "type": "t_uint256"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "investmentId",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_array(t_struct(RedemptionRequest)6272_storage)dyn_storage": {
+            "label": "struct FundV0.RedemptionRequest[]"
+          },
+          "t_struct(RedemptionRequest)6272_storage": {
+            "label": "struct FundV0.RedemptionRequest",
+            "members": [
+              {
+                "label": "investmentId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "minUsdAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "deadline",
+                "type": "t_uint256"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "redemptionId",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_array(t_struct(Redemption)6309_storage)dyn_storage": {
+            "label": "struct FundV0.Redemption[]"
+          },
+          "t_struct(Redemption)6309_storage": {
+            "label": "struct FundV0.Redemption",
+            "members": [
+              {
+                "label": "investmentId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "redemptionRequestId",
+                "type": "t_uint256"
+              },
+              {
+                "label": "fundAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdAmount",
+                "type": "t_uint256"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256"
+              },
+              {
+                "label": "usdTransferred",
+                "type": "t_bool"
+              }
+            ]
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)"
+          },
+          "t_mapping(t_address,t_array(t_struct(Checkpoint)1363_storage)dyn_storage)": {
+            "label": "mapping(address => struct ERC20VotesUpgradeable.Checkpoint[])"
+          },
+          "t_array(t_struct(Checkpoint)1363_storage)dyn_storage": {
+            "label": "struct ERC20VotesUpgradeable.Checkpoint[]"
+          },
+          "t_struct(Checkpoint)1363_storage": {
+            "label": "struct ERC20VotesUpgradeable.Checkpoint",
+            "members": [
+              {
+                "label": "fromBlock",
+                "type": "t_uint32"
+              },
+              {
+                "label": "votes",
+                "type": "t_uint224"
+              }
+            ]
+          },
+          "t_uint32": {
+            "label": "uint32"
+          },
+          "t_uint224": {
+            "label": "uint224"
+          },
+          "t_array(t_uint256)47_storage": {
+            "label": "uint256[47]"
+          },
+          "t_mapping(t_address,t_struct(Counter)2552_storage)": {
+            "label": "mapping(address => struct CountersUpgradeable.Counter)"
+          },
+          "t_struct(Counter)2552_storage": {
+            "label": "struct CountersUpgradeable.Counter",
+            "members": [
+              {
+                "label": "_value",
+                "type": "t_uint256"
+              }
+            ]
+          },
+          "t_bytes32": {
+            "label": "bytes32"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(address => mapping(address => uint256))"
+          },
+          "t_array(t_uint256)45_storage": {
+            "label": "uint256[45]"
+          }
+        }
+      }
+    },
+    "92bdc408be6f2ccc9b3c9ec1ef8ea7873d4c8ff8179dab79ad076ab0a0a81bc6": {
+      "address": "0xd689E45efF9E0faE48E95e3ee0076044651eA67b",
+      "txHash": "0xa31c25979269372baf3ca1e13bbcdd8a6afed85b2b402d70c01653fd523729c2",
+      "layout": {
+        "storage": [
+          {
+            "contract": "Initializable",
+            "label": "_initialized",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:21"
+          },
+          {
+            "contract": "Initializable",
+            "label": "_initializing",
+            "type": "t_bool",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:26"
+          },
+          {
+            "contract": "ERC1967UpgradeUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:214"
+          },
+          {
+            "contract": "UUPSUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:80"
+          },
+          {
+            "contract": "ContextUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)50_storage",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:30"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "_owner",
+            "type": "t_address",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:21"
+          },
+          {
+            "contract": "OwnableUpgradeable",
+            "label": "__gap",
+            "type": "t_array(t_uint256)49_storage",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:77"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "usdToken",
+            "type": "t_contract(ERC20Permit)4959",
+            "src": "contracts/RegistryV0.sol:20"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "latestFundVersion",
+            "type": "t_uint256",
+            "src": "contracts/RegistryV0.sol:21"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "fundImplementations",
+            "type": "t_array(t_contract(FundV0)9296)dyn_storage",
+            "src": "contracts/RegistryV0.sol:22"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "funds",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/RegistryV0.sol:23"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerWhitelist",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/RegistryV0.sol:25"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "bypassWhitelist",
+            "type": "t_bool",
+            "src": "contracts/RegistryV0.sol:26"
+          },
+          {
+            "contract": "RegistryV0",
+            "label": "managerToFund",
+            "type": "t_mapping(t_address,t_address)",
+            "src": "contracts/RegistryV0.sol:27"
+          }
+        ],
+        "types": {
+          "t_contract(ERC20Permit)4959": {
+            "label": "contract ERC20Permit"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_array(t_contract(FundV0)9296)dyn_storage": {
+            "label": "contract FundV0[]"
+          },
+          "t_contract(FundV0)9296": {
             "label": "contract FundV0"
           },
           "t_array(t_address)dyn_storage": {
