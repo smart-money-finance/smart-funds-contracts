@@ -28,7 +28,19 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
 
   event NewFundImplementation(FundV0 fundImplementation, uint256 version);
   event ManagerWhitelisted(address indexed manager);
-  event FundCreated(address indexed fund);
+  event FundCreated(
+    address indexed fund,
+    address indexed manager,
+    address custodian,
+    address[2] addressParams, // aumUpdater, feeBeneficiary
+    uint256[9] uintParams, // timelock, feeSweepInterval, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
+    bool usingUsdToken,
+    string name,
+    string symbol,
+    string logoUrl,
+    string contactInfo,
+    string tags
+  );
 
   error ManagerAlreadyHasFund();
   error NotWhitelisted();
@@ -70,7 +82,7 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
 
   function newFund(
     address[2] memory addressParams, // aumUpdater, feeBeneficiary
-    uint256[9] memory uintParams, // timelock, feeTimelock, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
+    uint256[9] memory uintParams, // timelock, feeSweepInterval, managementFee, performanceFee, maxInvestors, maxInvestmentsPerInvestor, minInvestmentAmount, initialPrice, initialAum
     string memory name,
     string memory symbol,
     string memory logoUrl,
@@ -104,7 +116,19 @@ contract RegistryV0 is UUPSUpgradeable, OwnableUpgradeable {
     address fundAddress = address(fundProxy);
     funds.push(fundAddress);
     managerToFund[msg.sender] = fundAddress;
-    emit FundCreated(fundAddress);
+    emit FundCreated(
+      fundAddress,
+      msg.sender,
+      msg.sender,
+      addressParams,
+      uintParams,
+      usingUsdToken,
+      name,
+      symbol,
+      logoUrl,
+      contactInfo,
+      tags
+    );
   }
 
   function whitelistMulti(address[] calldata managers) public onlyOwner {

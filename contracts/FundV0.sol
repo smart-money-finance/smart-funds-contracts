@@ -273,10 +273,11 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   error InvalidTimelock();
   error NotEnoughFees();
   error NoLongerImportingInvestments();
-  error ManagerCannotCreateRequests();
+  error CustodianCannotCreateRequests();
   error RequestOutOfDate();
-  error CannotTransferUsdToManager();
+  error CannotTransferUsdToCustodian();
   error AlreadySweepedThisPeriod();
+  error InvalidFeeTimestamp();
 
   function initialize(
     address[2] memory addressParams, // _aumUpdater, _feeBeneficiary
@@ -377,14 +378,14 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     _;
   }
 
-  function _notManager() internal view {
-    if (msg.sender == _manager) {
-      revert ManagerCannotCreateRequests();
+  function _notCustodian() internal view {
+    if (msg.sender == _custodian) {
+      revert CustodianCannotCreateRequests();
     }
   }
 
-  modifier notManager() {
-    _notManager();
+  modifier notCustodian() {
+    _notCustodian();
     _;
   }
 
@@ -459,6 +460,15 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
 
   function _stopImportingInvestments() internal {
     if (!_doneImportingInvestments) {
+      if (_navs.length == 1) {
+        emit NavUpdated(
+          0,
+          _navs[0].aum,
+          totalSupply(),
+          _navs[0].totalCapitalContributed,
+          ''
+        );
+      }
       _doneImportingInvestments = true;
       emit DoneImportingInvestments();
     }
@@ -467,54 +477,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   modifier stopImportingInvestments() {
     _stopImportingInvestments();
     _;
-  }
-
-  function logoUrl() public view returns (string memory) {
-    return _logoUrl;
-  }
-
-  function contactInfo() public view returns (string memory) {
-    return _contactInfo;
-  }
-
-  function tags() public view returns (string memory) {
-    return _tags;
-  }
-
-  function fundVars()
-    public
-    view
-    returns (
-      address manager,
-      address custodian,
-      address aumUpdater,
-      address feeBeneficiary,
-      uint256 timelock,
-      uint256 feeSweepInterval,
-      uint256 managementFee,
-      uint256 performanceFee,
-      uint256 maxInvestors,
-      uint256 maxInvestmentsPerInvestor,
-      uint256 minInvestmentAmount,
-      uint256 initialPrice,
-      bool usingUsdToken
-    )
-  {
-    return (
-      _manager,
-      _custodian,
-      _aumUpdater,
-      _feeBeneficiary,
-      _timelock,
-      _feeSweepInterval,
-      _managementFee,
-      _performanceFee,
-      _maxInvestors,
-      _maxInvestmentsPerInvestor,
-      _minInvestmentAmount,
-      _initialPrice,
-      _usingUsdToken
-    );
   }
 
   function decimals() public pure override returns (uint8) {
@@ -556,7 +518,20 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 newTotalCapitalContributed,
     string memory ipfsHash
   ) internal {
-    uint256 navId = _navs.length;
+    // only emit the event if imports are done. this ensures the graph and fund stats aren't affected by transient data during fund migration
+    if (_doneImportingInvestments) {
+      emit NavUpdated(
+        _navs.length,
+        newAum,
+        totalSupply(),
+        newTotalCapitalContributed,
+        ipfsHash
+      );
+    } else if (_navs.length > 0) {
+      // if still importing, replace the single nav element instead of pushing a new one
+      // the event will be emitted when done importing
+      _navs.pop();
+    }
     _navs.push(
       Nav({
         aum: newAum,
@@ -565,13 +540,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
         timestamp: block.timestamp,
         ipfsHash: ipfsHash
       })
-    );
-    emit NavUpdated(
-      navId,
-      newAum,
-      totalSupply(),
-      newTotalCapitalContributed,
-      ipfsHash
     );
   }
 
@@ -604,9 +572,6 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     }
     if (_investorInfo[investor].whitelisted) {
       revert AlreadyWhitelisted();
-    }
-    if (investor == _manager) {
-      revert InvalidInvestor();
     }
     if (
       _investors.length <= _investorInfo[investor].investorId ||
@@ -659,7 +624,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public onlyWhitelisted notManager {
+  ) public onlyWhitelisted notCustodian {
     if (
       update &&
       _investorInfo[msg.sender].investmentRequestId == type(uint256).max
@@ -732,7 +697,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       // _verifyUsdAllowance(investor, usdAmount);
       _usdToken.transferFrom(investor, _custodian, usdAmount);
     }
-    _mint(investor == _manager ? address(this) : investor, fundAmount);
+    _mint(investor == _custodian ? address(this) : investor, fundAmount);
     {
       Investment storage investment = _investments.push();
       investment.constants.investor = investor;
@@ -776,7 +741,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       transferUsd
     );
     uint256 newAum = usdAmount;
-    uint256 newTotalCapitalContributed = usdAmount;
+    uint256 newTotalCapitalContributed = managementFeeCostBasis;
     if (_navs.length > 0) {
       Nav storage nav = _navs[_navs.length - 1];
       newAum += nav.aum;
@@ -864,6 +829,9 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 originalUsdAmount,
     uint256 lastFeeSweepTimestamp
   ) public onlyManager notDoneImporting {
+    if (lastFeeSweepTimestamp > block.timestamp) {
+      revert InvalidFeeTimestamp();
+    }
     if (!_investorInfo[investor].whitelisted) {
       _addToWhitelist(investor);
     }
@@ -886,7 +854,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     uint256 minUsdAmount,
     uint256 deadline,
     bool update // used to prevent race conditions
-  ) public onlyWhitelisted onlyValidInvestmentId(investmentId) notManager {
+  ) public onlyWhitelisted onlyValidInvestmentId(investmentId) notCustodian {
     Investment storage investment = _investments[investmentId];
     if (update && investment.redemptionRequestId == type(uint256).max) {
       revert NoExistingRequest();
@@ -964,7 +932,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
       revert PriceOutsideTolerance();
     }
     _burn(
-      investment.constants.investor == _manager
+      investment.constants.investor == _custodian
         ? address(this)
         : investment.constants.investor,
       investment.remainingFundAmount
@@ -1078,8 +1046,8 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     bytes32 s
   ) public onlyValidInvestmentId(investmentId) {
     Investment storage investment = _investments[investmentId];
-    if (investment.constants.investor == _manager && transferUsd) {
-      revert CannotTransferUsdToManager();
+    if (investment.constants.investor == _custodian && transferUsd) {
+      revert CannotTransferUsdToCustodian();
     }
     if (investment.redemptionId != type(uint256).max) {
       revert InvestmentRedeemed();
@@ -1197,11 +1165,14 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     ) = _calcFees(investmentId);
     Investment storage investment = _investments[investmentId];
     // if this investment previously had a sweep and it happened later than the most recent sweep period ended, then revert to avoid double sweeping
-    if (investment.lastFeeSweepTimestamp > _lastFeeSweepEndedTimestamp) {
+    if (
+      investment.feeSweepsCount > 0 &&
+      investment.lastFeeSweepTimestamp > _lastFeeSweepEndedTimestamp
+    ) {
       revert AlreadySweepedThisPeriod();
     }
     address from = investment.constants.investor;
-    if (from == _manager) {
+    if (from == _custodian) {
       from = address(this);
     }
     _transfer(from, address(this), fundManagementFee);
@@ -1346,7 +1317,9 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
   //   notFeeSweeping
   // {
   //   // make sure fees either stayed the same or went down
-  //   if (newManagementFee > _managementFee || newPerformanceFee > _performanceFee) {
+  //   if (
+  //     newManagementFee > _managementFee || newPerformanceFee > _performanceFee
+  //   ) {
   //     revert InvalidFees(); // Invalid fees
   //   }
   //   _managementFee = newManagementFee;

@@ -27,29 +27,33 @@ async function main() {
     'FundV0',
     fundImplementationAddress,
   );
-  await fundImplementation.initialize(
-    [ethers.constants.AddressZero, ethers.constants.AddressZero],
-    [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      ethers.constants.MaxUint256,
-      '1000000000000000000000',
-      0,
-    ],
-    '',
-    '',
-    '',
-    '',
-    '',
-    false,
-    `${ethers.constants.AddressZero.slice(0, -1)}1`,
-    ethers.constants.AddressZero,
-    ethers.constants.AddressZero,
-  );
+  try {
+    await fundImplementation.initialize(
+      [ethers.constants.AddressZero, ethers.constants.AddressZero],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ethers.constants.MaxUint256,
+        '1000000000000000000000',
+        0,
+      ],
+      '',
+      '',
+      '',
+      '',
+      '',
+      false,
+      `${ethers.constants.AddressZero.slice(0, -1)}1`,
+      ethers.constants.AddressZero,
+      ethers.constants.AddressZero,
+    );
+  } catch (e: any) {
+    console.log(e.error);
+  }
 
   const RegistryFactory = await ethers.getContractFactory('RegistryV0');
   const Registry = await upgrades.deployProxy(
