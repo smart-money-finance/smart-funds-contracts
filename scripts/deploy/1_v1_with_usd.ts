@@ -7,7 +7,8 @@ async function main() {
 
   const usdTokenAddress = usdToken.address;
 
-  const bypassWhitelist = network.name !== 'mainnet';
+  const bypassWhitelist =
+    network.name !== 'mainnet' && network.name !== 'polygon';
 
   const FundFactory = await ethers.getContractFactory('FundV0');
   const fundProxy = await upgrades.deployProxy(FundFactory, {
