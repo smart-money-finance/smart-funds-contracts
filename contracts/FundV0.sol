@@ -987,7 +987,7 @@ contract FundV0 is ERC20VotesUpgradeable, UUPSUpgradeable {
     Nav storage nav = _navs[_navs.length - 1];
     _addNav(
       nav.aum - usdAmount,
-      nav.totalCapitalContributed - investment.constants.initialUsdAmount,
+      nav.totalCapitalContributed - investment.constants.managementFeeCostBasis,
       ''
     );
     if (_activeInvestmentCount == 0) {
